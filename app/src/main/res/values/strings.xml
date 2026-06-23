@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Water Can Tracker</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_payments">Payments</string>
+    <string name="nav_members">Members</string>
+    <string name="nav_reports">Reports</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_next_payer_title">Next Person To Pay</string>
+    <string name="dashboard_last_payment_title">Last Payment</string>
+    <string name="dashboard_monthly_spending_title">Monthly Spending</string>
+    <string name="dashboard_statistics_title">Statistics</string>
+    <string name="dashboard_no_members">Add members to start tracking</string>
+    <string name="dashboard_no_payments">No payments recorded yet</string>
+    <string name="dashboard_record_payment">Record Payment</string>
+    <string name="dashboard_active_members">Active Members</string>
+    <string name="dashboard_cans_this_month">Cans this month</string>
+    <string name="dashboard_spent_this_month">Spent this month</string>
+
+    <!-- Payments -->
+    <string name="payments_title">Payment History</string>
+    <string name="payments_add">Add Payment</string>
+    <string name="payments_edit">Edit Payment</string>
+    <string name="payments_search_placeholder">Search by member, vendor, notes\u2026</string>
+    <string name="payments_filter_all_members">All Members</string>
+    <string name="payments_filter_all_time">All Time</string>
+    <string name="payments_no_results">No payments match your filters</string>
+    <string name="payments_delete_confirm_title">Delete this payment?</string>
+    <string name="payments_delete_confirm_message">This will remove the record and recalculate the rotation queue. This can\'t be undone.</string>
+
+    <!-- Payment form -->
+    <string name="payment_form_quantity">Number of cans</string>
+    <string name="payment_form_amount">Total amount paid</string>
+    <string name="payment_form_paid_by">Paid by</string>
+    <string name="payment_form_date">Purchase date</string>
+    <string name="payment_form_notes">Notes (optional)</string>
+    <string name="payment_form_vendor">Vendor name (optional)</string>
+    <string name="payment_form_receipt">Attach receipt photo</string>
+    <string name="payment_form_save">Save Payment</string>
+    <string name="payment_form_error_amount">Enter a valid amount</string>
+    <string name="payment_form_error_quantity">Enter a valid quantity</string>
+    <string name="payment_form_error_payer">Select who paid</string>
+
+    <!-- Members -->
+    <string name="members_title">Members</string>
+    <string name="members_add">Add Member</string>
+    <string name="members_edit">Edit Member</string>
+    <string name="members_name">Name</string>
+    <string name="members_phone">Phone number (optional)</string>
+    <string name="members_active">Active</string>
+    <string name="members_inactive">Inactive</string>
+    <string name="members_delete_confirm_title">Remove this member?</string>
+    <string name="members_delete_confirm_message">Their payment history will be kept, but they\'ll be removed from the rotation queue.</string>
+    <string name="members_set_next_payer">Set as next payer</string>
+    <string name="members_skip_turn">Skip this turn</string>
+    <string name="members_move_up">Move up in queue</string>
+    <string name="members_move_down">Move down in queue</string>
+    <string name="members_empty_state">No members yet. Add the people who share water can costs.</string>
+
+    <!-- Member stats -->
+    <string name="stats_total_payments">Total payments</string>
+    <string name="stats_total_contributed">Total contributed</string>
+    <string name="stats_last_payment">Last payment</string>
+    <string name="stats_times_paid">Times paid</string>
+    <string name="stats_average_contribution">Average per payment</string>
+    <string name="stats_above_average">Above average</string>
+    <string name="stats_below_average">Below average</string>
+    <string name="stats_on_average">On average</string>
+
+    <!-- Reports -->
+    <string name="reports_title">Reports</string>
+    <string name="reports_monthly_spending">Monthly Spending Report</string>
+    <string name="reports_member_contribution">Member Contribution Report</string>
+    <string name="reports_payment_frequency">Payment Frequency Report</string>
+    <string name="reports_price_trend">Water Can Price Trend</string>
+    <string name="reports_export_pdf">Export as PDF</string>
+    <string name="reports_export_excel">Export as Excel</string>
+    <string name="reports_export_csv">Export as CSV</string>
+    <string name="reports_balance_tracking">Balance Tracking</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_theme">Appearance</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notifications_reminders">Payment reminders</string>
+    <string name="settings_notifications_overdue">Daily overdue reminders</string>
+    <string name="settings_reminder_time">Reminder time</string>
+    <string name="settings_can_price">Default price per can</string>
+    <string name="settings_backup_restore">Backup &amp; Restore</string>
+    <string name="settings_backup_export">Export backup to device</string>
+    <string name="settings_backup_import">Restore from backup file</string>
+    <string name="settings_backup_drive">Backup to Google Drive</string>
+    <string name="settings_monthly_reset">Monthly reset</string>
+    <string name="settings_monthly_reset_desc">Archive this month\'s data and start a fresh cycle</string>
+    <string name="settings_rotation_order">Custom rotation order</string>
+    <string name="settings_about">About</string>
+
+    <!-- Widget -->
+    <string name="widget_title">Who Pays Next</string>
+    <string name="widget_description">Shows who\'s next to pay for the water can, right on your home screen.</string>
+    <string name="widget_next_up">Next up</string>
+    <string name="widget_all_caught_up">All caught up</string>
+    <string name="widget_no_members">Add members in the app</string>
+    <string name="widget_tap_to_record">Tap to record payment</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_reminders_name">Payment Reminders</string>
+    <string name="notification_channel_reminders_desc">Reminds the next payer it\'s their turn</string>
+    <string name="notification_channel_overdue_name">Overdue Alerts</string>
+    <string name="notification_channel_overdue_desc">Daily alerts when a payment is overdue</string>
+    <string name="notification_reminder_title">It\'s your turn! 💧</string>
+    <string name="notification_reminder_body">%1$s, you\'re up next to pay for the water can.</string>
+    <string name="notification_overdue_title">Payment overdue</string>
+    <string name="notification_overdue_body">%1$s still hasn\'t paid for the water can. It\'s been %2$d day(s).</string>
+
+    <!-- Common -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_close">Close</string>
+    <string name="action_confirm">Confirm</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_share">Share</string>
+    <string name="action_done">Done</string>
+    <string name="action_add">Add</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+</resources>
