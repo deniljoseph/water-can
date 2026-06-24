@@ -1,8 +1,5 @@
 package com.watercantracker.app.domain.model
 
-/**
- * Aggregated statistics for a single member, computed from their payment history.
- */
 data class MemberStats(
     val memberId: Long,
     val memberName: String,
@@ -25,19 +22,16 @@ data class MemberStats(
 }
 
 /**
- * A snapshot of monthly aggregated spending, used for the dashboard and the monthly report.
+ * yearMonth is nullable so Room can map rows where strftime returns NULL
+ * (e.g. when the payments table is empty or purchaseDate is 0).
  */
 data class MonthlySpendingSummary(
-    val yearMonth: String, // "2026-06"
+    val yearMonth: String?,   // "2026-06" — nullable to survive empty-table queries
     val totalCans: Int,
     val totalAmount: Double,
     val paymentCount: Int
 )
 
-/**
- * Result of resolving who should pay next, including the reasoning so the UI can explain it
- * (e.g. "manually set" vs "next in rotation").
- */
 data class NextPayerResult(
     val member: com.watercantracker.app.data.local.entity.MemberEntity?,
     val reason: NextPayerReason,

@@ -71,7 +71,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                             Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(s.yearMonth, style = MaterialTheme.typography.bodySmall)
+                            Text(s.yearMonth ?: "", style = MaterialTheme.typography.bodySmall)
                             Text("${s.totalCans}", style = MaterialTheme.typography.bodySmall)
                             Text(formatAmount(s.totalAmount), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
