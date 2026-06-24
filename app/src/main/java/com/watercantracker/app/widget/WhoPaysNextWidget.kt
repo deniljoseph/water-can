@@ -7,7 +7,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -17,14 +16,11 @@ import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
-import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -33,12 +29,10 @@ import com.watercantracker.app.MainActivity
 import com.watercantracker.app.data.local.WaterCanDatabase
 import com.watercantracker.app.data.repository.MemberRepository
 import com.watercantracker.app.data.repository.PaymentRepository
-import kotlinx.coroutines.flow.first
 
 class WhoPaysNextWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // Directly query the DB here since widgets operate outside the normal DI graph
         val db = WaterCanDatabase.getInstance(context)
         val memberRepo = MemberRepository(db.memberDao())
         val paymentRepo = PaymentRepository(db.paymentDao())
@@ -74,19 +68,15 @@ private fun WidgetContent(
             modifier = GlanceModifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header label
             Text(
-                text = "💧 Next to Pay",
+                text = "\uD83D\uDCA7 Next to Pay",
                 style = TextStyle(
                     color = ColorProvider(Color(0xFFADE8EB)),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
-
             Spacer(modifier = GlanceModifier.height(6.dp))
-
-            // Main name display
             if (nextPayerName != null) {
                 Text(
                     text = nextPayerName,
@@ -113,12 +103,9 @@ private fun WidgetContent(
                     )
                 )
             }
-
             Spacer(modifier = GlanceModifier.height(8.dp))
-
-            // Tap hint
             Text(
-                text = "Tap to record payment →",
+                text = "Tap to record payment \u2192",
                 style = TextStyle(
                     color = ColorProvider(Color(0xFFE8893B)),
                     fontSize = 10.sp,

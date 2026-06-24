@@ -1,6 +1,8 @@
 package com.watercantracker.app.data.local
 
+import android.content.Context
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
@@ -19,25 +21,28 @@ import com.watercantracker.app.data.local.entity.SettingsEntity
         NotificationEntity::class
     ],
     version = 1,
-    exportSchema = true
+    exportSchema = false
 )
 abstract class WaterCanDatabase : RoomDatabase() {
     abstract fun memberDao(): MemberDao
     abstract fun paymentDao(): PaymentDao
     abstract fun settingsDao(): SettingsDao
     abstract fun notificationDao(): NotificationDao
-}
 
-// Companion object needed for widget (Glance widgets can't use Hilt DI)
-// The Room singleton is shared if Hilt already built it; otherwise a new instance is created.
-private var _instance: WaterCanDatabase? = null
+    companion object {
+        @Volatile private var INSTANCE: WaterCanDatabase? = null
 
-fun WaterCanDatabase.Companion.getInstance(context: android.content.Context): WaterCanDatabase {
-    return _instance ?: synchronized(WaterCanDatabase::class.java) {
-        _instance ?: androidx.room.Room.databaseBuilder(
-            context.applicationContext,
-            WaterCanDatabase::class.java,
-            "water_can_tracker.db"
-        ).fallbackToDestructiveMigration().build().also { _instance = it }
+        // Used by the Glance widget which cannot access Hilt's DI graph
+        fun getInstance(context: Context): WaterCanDatabase =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    WaterCanDatabase::class.java,
+                    "water_can_tracker.db"
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { INSTANCE = it }
+            }
     }
 }

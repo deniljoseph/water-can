@@ -1,7 +1,6 @@
 package com.watercantracker.app.di
 
 import android.content.Context
-import androidx.room.Room
 import com.watercantracker.app.data.local.WaterCanDatabase
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
@@ -21,13 +20,7 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WaterCanDatabase =
-        Room.databaseBuilder(
-            context,
-            WaterCanDatabase::class.java,
-            "water_can_tracker.db"
-        )
-            .fallbackToDestructiveMigration()
-            .build()
+        WaterCanDatabase.getInstance(context)
 
     @Provides fun provideMemberDao(db: WaterCanDatabase): MemberDao = db.memberDao()
     @Provides fun providePaymentDao(db: WaterCanDatabase): PaymentDao = db.paymentDao()
