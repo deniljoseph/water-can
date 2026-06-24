@@ -2,6 +2,7 @@ package com.watercantracker.app.ui.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,55 +18,45 @@ import com.watercantracker.app.ui.screens.reports.ReportsScreen
 import com.watercantracker.app.ui.screens.settings.SettingsScreen
 
 @Composable
-fun WaterCanNavGraph(navController: NavHostController) {
+fun WaterCanNavGraph(
+    navController: NavHostController,
+    bottomPadding: PaddingValues
+) {
     NavHost(
         navController = navController,
         startDestination = Screen.Dashboard.route,
         enterTransition = {
-            slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.Left,
-                tween(220)
-            )
+            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(220))
         },
         exitTransition = {
-            slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Left,
-                tween(220)
-            )
+            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(220))
         },
         popEnterTransition = {
-            slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.Right,
-                tween(220)
-            )
+            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220))
         },
         popExitTransition = {
-            slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Right,
-                tween(220)
-            )
+            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220))
         }
     ) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
+                bottomPadding = bottomPadding,
                 onAddPayment = { navController.navigate(Screen.AddPayment.route) }
             )
         }
-
         composable(Screen.Payments.route) {
             PaymentsScreen(
+                bottomPadding = bottomPadding,
                 onAddPayment = { navController.navigate(Screen.AddPayment.route) },
                 onEditPayment = { id -> navController.navigate(Screen.EditPayment.createRoute(id)) }
             )
         }
-
         composable(Screen.AddPayment.route) {
             AddEditPaymentScreen(
                 paymentId = null,
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(
             route = Screen.EditPayment.route,
             arguments = listOf(navArgument("paymentId") { type = NavType.LongType })
@@ -75,21 +66,16 @@ fun WaterCanNavGraph(navController: NavHostController) {
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Members.route) {
             MembersScreen(
+                bottomPadding = bottomPadding,
                 onAddMember = { navController.navigate(Screen.AddMember.route) },
                 onEditMember = { id -> navController.navigate(Screen.EditMember.createRoute(id)) }
             )
         }
-
         composable(Screen.AddMember.route) {
-            AddEditMemberScreen(
-                memberId = null,
-                onBack = { navController.popBackStack() }
-            )
+            AddEditMemberScreen(memberId = null, onBack = { navController.popBackStack() })
         }
-
         composable(
             route = Screen.EditMember.route,
             arguments = listOf(navArgument("memberId") { type = NavType.LongType })
@@ -99,13 +85,11 @@ fun WaterCanNavGraph(navController: NavHostController) {
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Reports.route) {
-            ReportsScreen()
+            ReportsScreen(bottomPadding = bottomPadding)
         }
-
         composable(Screen.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(bottomPadding = bottomPadding)
         }
     }
 }

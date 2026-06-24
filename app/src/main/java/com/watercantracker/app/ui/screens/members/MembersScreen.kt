@@ -1,6 +1,7 @@
 package com.watercantracker.app.ui.screens.members
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,7 @@ import com.watercantracker.app.ui.components.formatAmount
 @Composable
 fun MembersScreen(
     onAddMember: () -> Unit,
+    bottomPadding: PaddingValues,
     onEditMember: (Long) -> Unit,
     viewModel: MembersViewModel = hiltViewModel()
 ) {
@@ -43,7 +45,7 @@ fun MembersScreen(
         },
         floatingActionButton = {
             if (state.members.isNotEmpty()) {
-                FloatingActionButton(onClick = onAddMember) {
+                FloatingActionButton(onClick = onAddMember, modifier = Modifier.padding(bottom = bottomPadding.calculateBottomPadding())) {
                     Icon(Icons.Rounded.Add, contentDescription = "Add member")
                 }
             }
@@ -64,7 +66,7 @@ fun MembersScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp, horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding.calculateBottomPadding() + 80.dp, start = 16.dp, end = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Balance summary header

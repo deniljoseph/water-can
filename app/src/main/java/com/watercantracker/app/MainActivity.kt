@@ -30,8 +30,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // Ensure reminder worker is scheduled on first launch / after updates
         ReminderWorker.schedule(workManager)
 
         setContent {
@@ -50,8 +48,6 @@ private fun WaterCanApp() {
     val navController = rememberNavController()
     val currentBackstack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackstack?.destination?.route
-
-    // Top-level routes where the bottom nav should be shown
     val topLevelRoutes = bottomNavItems.map { it.screen.route }
     val showBottomBar = currentRoute in topLevelRoutes
 
@@ -88,8 +84,11 @@ private fun WaterCanApp() {
             }
         }
     ) { innerPadding ->
+        // Pass innerPadding into the nav graph so every screen respects
+        // the bottom nav bar height and nothing gets clipped beneath it
         WaterCanNavGraph(
-            navController = navController
+            navController = navController,
+            bottomPadding = innerPadding
         )
     }
 }

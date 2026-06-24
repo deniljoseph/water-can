@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.watercantracker.app.domain.model.NextPayerReason
 import com.watercantracker.app.ui.components.MemberAvatar
 import com.watercantracker.app.ui.components.StatChip
 import com.watercantracker.app.ui.components.formatAmount
@@ -33,6 +34,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
+    bottomPadding: PaddingValues,
     onAddPayment: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -53,24 +55,23 @@ fun DashboardScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Water Can Tracker", fontWeight = FontWeight.Bold)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                }
             )
         },
+        // FAB always visible — sits above bottom nav via bottomPadding
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddPayment,
                 icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                 text = { Text("Record Payment") },
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = bottomPadding.calculateBottomPadding())
             )
         }
-    ) { padding ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
-                .padding(padding)
+                .padding(innerPadding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -82,9 +83,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
-                    .background(
-                        Brush.linearGradient(listOf(TealDeep, TealMid))
-                    )
+                    .background(Brush.linearGradient(listOf(TealDeep, TealMid)))
                     .padding(24.dp)
             ) {
                 Column {
@@ -97,11 +96,7 @@ fun DashboardScreen(
                     Spacer(Modifier.height(12.dp))
                     if (nextMember != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            MemberAvatar(
-                                name = nextMember.name,
-                                avatarUri = nextMember.avatarUri,
-                                size = 56.dp
-                            )
+                            MemberAvatar(name = nextMember.name, avatarUri = nextMember.avatarUri, size = 56.dp)
                             Spacer(Modifier.width(14.dp))
                             Column {
                                 Text(
@@ -117,26 +112,21 @@ fun DashboardScreen(
                                 )
                             }
                         }
-                    } else {
-                        Text(
-                            "No members yet — add members to start tracking.",
-                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    if (nextMember != null) {
                         Spacer(Modifier.height(16.dp))
                         OutlinedButton(
                             onClick = onAddPayment,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = AmberAccent
-                            ),
                             border = ButtonDefaults.outlinedButtonBorder.copy(
                                 brush = Brush.linearGradient(listOf(AmberAccent, AmberAccent))
                             )
                         ) {
                             Text("Mark as paid →", color = AmberAccent, fontWeight = FontWeight.SemiBold)
                         }
+                    } else {
+                        Text(
+                            "No members yet — add members to start tracking.",
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }
@@ -145,11 +135,7 @@ fun DashboardScreen(
             val lp = state.lastPayment
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "Last Payment",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text("Last Payment", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
                     if (lp != null) {
                         Row(
@@ -158,49 +144,24 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                MemberAvatar(
-                                    name = lp.paidByNameSnapshot,
-                                    avatarUri = state.lastPaymentMember?.avatarUri,
-                                    size = 36.dp
-                                )
+                                MemberAvatar(name = lp.paidByNameSnapshot, avatarUri = state.lastPaymentMember?.avatarUri, size = 36.dp)
                                 Spacer(Modifier.width(10.dp))
                                 Column {
                                     Text(lp.paidByNameSnapshot, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        df.format(Date(lp.purchaseDate)),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Text(df.format(Date(lp.purchaseDate)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    formatAmount(lp.amount),
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "${lp.quantity} can${if (lp.quantity != 1) "s" else ""}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Text(formatAmount(lp.amount), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text("${lp.quantity} can${if (lp.quantity != 1) "s" else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         lp.vendorName?.let {
                             Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Vendor: $it",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("Vendor: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
-                        Text(
-                            "No payments recorded yet.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text("No payments recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -209,11 +170,7 @@ fun DashboardScreen(
             val ms = state.monthSummary
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "This Month",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text("This Month", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         StatChip("Total Spent", formatAmount(ms?.totalAmount ?: 0.0))
@@ -225,42 +182,26 @@ fun DashboardScreen(
 
             // ── Active Members ────────────────────────────────────────────────
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Rounded.Groups,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
-                    )
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(
-                            "${state.activeMemberCount}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Active members in rotation",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("${state.activeMemberCount}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Active members in rotation", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
-            Spacer(Modifier.height(88.dp)) // FAB clearance
+            // Extra space so FAB never covers last card
+            Spacer(Modifier.height(100.dp))
         }
     }
 }
 
-private val com.watercantracker.app.domain.model.NextPayerReason.label: String
+private val NextPayerReason.label: String
     get() = when (this) {
-        com.watercantracker.app.domain.model.NextPayerReason.MANUAL_OVERRIDE -> "Manually set"
-        com.watercantracker.app.domain.model.NextPayerReason.ROTATION_ORDER -> "Next in rotation"
-        com.watercantracker.app.domain.model.NextPayerReason.NO_ACTIVE_MEMBERS -> ""
-        com.watercantracker.app.domain.model.NextPayerReason.ALL_SKIPPED -> "All others skipped"
+        NextPayerReason.MANUAL_OVERRIDE -> "Manually set"
+        NextPayerReason.ROTATION_ORDER -> "Next in rotation"
+        NextPayerReason.NO_ACTIVE_MEMBERS -> ""
+        NextPayerReason.ALL_SKIPPED -> "All others skipped"
     }

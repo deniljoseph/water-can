@@ -2,6 +2,7 @@ package com.watercantracker.app.ui.screens.reports
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -21,7 +22,7 @@ import com.watercantracker.app.ui.components.formatAmount
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
+fun ReportsScreen(bottomPadding: PaddingValues, viewModel: ReportsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -130,7 +131,7 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(bottomPadding.calculateBottomPadding() + 24.dp))
         }
     }
 
