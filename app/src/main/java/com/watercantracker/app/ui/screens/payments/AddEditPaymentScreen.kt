@@ -1,7 +1,6 @@
 package com.watercantracker.app.ui.screens.payments
 
 import android.app.DatePickerDialog
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -9,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.watercantracker.app.data.local.entity.MemberEntity
+import com.watercantracker.app.ui.components.formatAmount
+import com.watercantracker.app.ui.screens.settings.SettingsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,9 +31,14 @@ import java.util.*
 fun AddEditPaymentScreen(
     paymentId: Long?,
     onBack: () -> Unit,
-    viewModel: PaymentsViewModel = hiltViewModel()
+    viewModel: PaymentsViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val pricePerCan = settingsState.settings.defaultPricePerCan
+    val currency = settingsState.settings.currencySymbol
+
     val context = LocalContext.current
     val df = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
     val isEditing = paymentId != null
@@ -45,11 +52,24 @@ fun AddEditPaymentScreen(
     var vendor by remember { mutableStateOf("") }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
 
-    // Pre-fill next payer when adding new
+    // Derived: expected full amount based on price-per-can setting
+    val quantityInt = quantity.toIntOrNull() ?: 0
+    val expectedAmount = if (pricePerCan > 0 && quantityInt > 0) pricePerCan * quantityInt else 0.0
+    val enteredAmount = amount.toDoubleOrNull() ?: 0.0
+    val isPartialPayment = expectedAmount > 0 && enteredAmount > 0 && enteredAmount < expectedAmount
+    val shortfall = if (isPartialPayment) expectedAmount - enteredAmount else 0.0
+
+    // Auto-fill amount when quantity changes and price is set
+    LaunchedEffect(quantity, pricePerCan) {
+        if (!isEditing && pricePerCan > 0) {
+            val qty = quantity.toIntOrNull() ?: 0
+            if (qty > 0) amount = String.format("%.2f", pricePerCan * qty)
+        }
+    }
+
+    // Pre-fill next active member for new payments
     LaunchedEffect(state.members) {
-        if (!isEditing && selectedMember == null && state.members.isNotEmpty()) {
-            // Default to first active member — DashboardVM already resolved next payer;
-            // simple default here since PaymentsVM doesn't hold rotation logic
+        if (!isEditing && selectedMember == null) {
             selectedMember = state.members.firstOrNull { it.isActive }
         }
     }
@@ -68,7 +88,6 @@ fun AddEditPaymentScreen(
         }
     }
 
-    // Validation
     var quantityError by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
     var memberError by remember { mutableStateOf(false) }
@@ -83,31 +102,27 @@ fun AddEditPaymentScreen(
     fun onSave() {
         if (!validate()) return
         val member = selectedMember ?: return
-        val qty = quantity.toInt()
-        val amt = amount.toDouble()
-
         if (isEditing && paymentId != null) {
             val existing = state.payments.firstOrNull { it.id == paymentId } ?: return
-            viewModel.updatePayment(
-                existing.copy(
-                    quantity = qty,
-                    amount = amt,
-                    paidByMemberId = member.id,
-                    paidByNameSnapshot = member.name,
-                    purchaseDate = purchaseDate,
-                    notes = notes.trim().takeIf { it.isNotEmpty() },
-                    vendorName = vendor.trim().takeIf { it.isNotEmpty() }
-                )
-            )
+            viewModel.updatePayment(existing.copy(
+                quantity = quantityInt,
+                amount = enteredAmount,
+                paidByMemberId = member.id,
+                paidByNameSnapshot = member.name,
+                purchaseDate = purchaseDate,
+                notes = notes.trim().takeIf { it.isNotEmpty() },
+                vendorName = vendor.trim().takeIf { it.isNotEmpty() }
+            ))
         } else {
-            viewModel.addPayment(qty, amt, member, purchaseDate,
+            viewModel.addPayment(
+                quantityInt, enteredAmount, member, purchaseDate,
                 notes.trim().takeIf { it.isNotEmpty() },
-                vendor.trim().takeIf { it.isNotEmpty() }, null)
+                vendor.trim().takeIf { it.isNotEmpty() }, null
+            )
         }
         onBack()
     }
 
-    // Date picker
     val cal = Calendar.getInstance().apply { timeInMillis = purchaseDate }
     val datePicker = DatePickerDialog(
         context,
@@ -120,9 +135,7 @@ fun AddEditPaymentScreen(
             TopAppBar(
                 title = { Text(if (isEditing) "Edit Payment" else "Record Payment", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
                 }
             )
         }
@@ -135,7 +148,35 @@ fun AddEditPaymentScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Member selector
+
+            // ── Price-per-can info banner ──────────────────────────────────────
+            if (pricePerCan > 0) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Info, null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Price per can: ${formatAmount(pricePerCan, currency)}  •  " +
+                                    "Full amount for $quantityInt can${if (quantityInt != 1) "s" else ""}: " +
+                                    if (expectedAmount > 0) formatAmount(expectedAmount, currency) else "—",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            // ── Member selector ───────────────────────────────────────────────
             ExposedDropdownMenuBox(
                 expanded = memberDropdownExpanded,
                 onExpandedChange = { memberDropdownExpanded = it }
@@ -145,31 +186,22 @@ fun AddEditPaymentScreen(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Paid by *") },
-                    trailingIcon = {
-                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null)
-                    },
+                    trailingIcon = { Icon(Icons.Rounded.KeyboardArrowDown, null) },
                     isError = memberError,
                     supportingText = if (memberError) {{ Text("Select who paid") }} else null,
                     modifier = Modifier.fillMaxWidth().menuAnchor()
                 )
-                ExposedDropdownMenu(
-                    expanded = memberDropdownExpanded,
-                    onDismissRequest = { memberDropdownExpanded = false }
-                ) {
+                ExposedDropdownMenu(expanded = memberDropdownExpanded, onDismissRequest = { memberDropdownExpanded = false }) {
                     state.members.filter { it.isActive }.forEach { member ->
                         DropdownMenuItem(
                             text = { Text(member.name) },
-                            onClick = {
-                                selectedMember = member
-                                memberDropdownExpanded = false
-                                memberError = false
-                            }
+                            onClick = { selectedMember = member; memberDropdownExpanded = false; memberError = false }
                         )
                     }
                 }
             }
 
-            // Quantity
+            // ── Quantity ──────────────────────────────────────────────────────
             OutlinedTextField(
                 value = quantity,
                 onValueChange = { quantity = it; quantityError = false },
@@ -180,19 +212,57 @@ fun AddEditPaymentScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Amount
+            // ── Amount ────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it; amountError = false },
-                label = { Text("Total amount paid *") },
+                label = {
+                    Text(if (pricePerCan > 0) "Amount paid (partial allowed) *" else "Total amount paid *")
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                leadingIcon = { Text("$", modifier = Modifier.padding(start = 12.dp)) },
+                leadingIcon = { Text(currency, modifier = Modifier.padding(start = 12.dp)) },
                 isError = amountError,
-                supportingText = if (amountError) {{ Text("Enter a valid amount") }} else null,
+                supportingText = when {
+                    amountError -> {{ Text("Enter a valid amount") }}
+                    isPartialPayment -> {{
+                        Text(
+                            "⚠ Partial payment — ${formatAmount(shortfall, currency)} still owed",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }}
+                    expectedAmount > 0 && enteredAmount >= expectedAmount -> {{
+                        Text("✓ Full payment", color = MaterialTheme.colorScheme.primary)
+                    }}
+                    else -> null
+                },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Date picker field
+            // ── Partial payment info card ─────────────────────────────────────
+            if (isPartialPayment) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "Partial Payment",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${selectedMember?.name ?: "This person"} will owe ${formatAmount(shortfall, currency)} " +
+                                    "after this payment. This will show in the Balances section.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            // ── Date ──────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = df.format(Date(purchaseDate)),
                 onValueChange = {},
@@ -200,13 +270,13 @@ fun AddEditPaymentScreen(
                 label = { Text("Purchase date") },
                 trailingIcon = {
                     IconButton(onClick = { datePicker.show() }) {
-                        Icon(Icons.Rounded.CalendarMonth, contentDescription = "Pick date")
+                        Icon(Icons.Rounded.CalendarMonth, "Pick date")
                     }
                 },
-                modifier = Modifier.fillMaxWidth().clickable { datePicker.show() }
+                modifier = Modifier.fillMaxWidth()
             )
 
-            // Vendor
+            // ── Vendor ────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = vendor,
                 onValueChange = { vendor = it },
@@ -214,7 +284,7 @@ fun AddEditPaymentScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Notes
+            // ── Notes ─────────────────────────────────────────────────────────
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },

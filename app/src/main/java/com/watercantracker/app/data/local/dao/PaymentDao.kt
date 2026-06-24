@@ -18,12 +18,11 @@ interface PaymentDao {
     @Query("SELECT * FROM payments ORDER BY purchaseDate DESC")
     fun observeAllPayments(): Flow<List<PaymentEntity>>
 
-    @Query(
-        """
+    @Query("""
         SELECT * FROM payments
         WHERE (:memberId IS NULL OR paidByMemberId = :memberId)
         AND (:startDate IS NULL OR purchaseDate >= :startDate)
-        AND (:endDate IS NULL OR purchaseDate <= :endDate)
+        AND (:endDate   IS NULL OR purchaseDate <= :endDate)
         AND (
             :query = ''
             OR paidByNameSnapshot LIKE '%' || :query || '%'
@@ -31,8 +30,7 @@ interface PaymentDao {
             OR notes LIKE '%' || :query || '%'
         )
         ORDER BY purchaseDate DESC
-        """
-    )
+    """)
     fun observeFilteredPayments(
         memberId: Long?,
         startDate: Long?,
@@ -61,71 +59,68 @@ interface PaymentDao {
     @Query("DELETE FROM payments")
     suspend fun deleteAllPayments()
 
-    // ── Monthly summary for a date range ─────────────────────────────────────
-    // HAVING yearMonth IS NOT NULL guards against empty-table NULL rows
-    @Query(
-        """
+    @Query("""
         SELECT strftime('%Y-%m', purchaseDate / 1000, 'unixepoch') AS yearMonth,
-               COALESCE(SUM(quantity), 0)  AS totalCans,
+               COALESCE(SUM(quantity), 0)   AS totalCans,
                COALESCE(SUM(amount),   0.0) AS totalAmount,
-               COUNT(*)                    AS paymentCount
+               COUNT(*)                     AS paymentCount
         FROM payments
         WHERE purchaseDate >= :monthStart AND purchaseDate < :monthEnd
         GROUP BY yearMonth
         HAVING yearMonth IS NOT NULL
         LIMIT 1
-        """
-    )
+    """)
     fun observeMonthlySummary(monthStart: Long, monthEnd: Long): Flow<MonthlySpendingSummary?>
 
-    // ── All months ────────────────────────────────────────────────────────────
-    @Query(
-        """
+    @Query("""
         SELECT strftime('%Y-%m', purchaseDate / 1000, 'unixepoch') AS yearMonth,
-               COALESCE(SUM(quantity), 0)  AS totalCans,
+               COALESCE(SUM(quantity), 0)   AS totalCans,
                COALESCE(SUM(amount),   0.0) AS totalAmount,
-               COUNT(*)                    AS paymentCount
+               COUNT(*)                     AS paymentCount
         FROM payments
         GROUP BY yearMonth
         HAVING yearMonth IS NOT NULL
         ORDER BY yearMonth DESC
-        """
-    )
+    """)
     fun observeAllMonthlySummaries(): Flow<List<MonthlySpendingSummary>>
 
-    // ── Per-member stats ──────────────────────────────────────────────────────
-    @Query(
-        """
+    @Query("""
         SELECT
-            m.id   AS memberId,
-            m.name AS memberName,
+            m.id        AS memberId,
+            m.name      AS memberName,
             m.avatarUri,
             m.isActive,
-            COUNT(p.id)                                                          AS totalPayments,
-            COALESCE(SUM(p.amount), 0.0)                                         AS totalAmountContributed,
-            MAX(p.purchaseDate)                                                   AS lastPaymentDate,
+            COUNT(p.id)                                                               AS totalPayments,
+            COALESCE(SUM(p.amount), 0.0)                                              AS totalAmountContributed,
+            MAX(p.purchaseDate)                                                        AS lastPaymentDate,
             CASE WHEN COUNT(p.id) > 0
                  THEN COALESCE(SUM(p.amount), 0.0) / COUNT(p.id)
-                 ELSE 0.0 END                                                    AS averageContribution
+                 ELSE 0.0 END                                                         AS averageContribution
         FROM members m
         LEFT JOIN payments p ON p.paidByMemberId = m.id
         GROUP BY m.id
         ORDER BY totalAmountContributed DESC
-        """
-    )
+    """)
     fun observeMemberStats(): Flow<List<MemberStats>>
 
-    @Query("SELECT COALESCE(AVG(amount), 0.0) FROM payments")
-    fun observeAverageAmountPerPayment(): Flow<Double>
+    /** Total amount paid across ALL payments — used to compute fair shares. */
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM payments")
+    fun observeTotalGroupSpend(): Flow<Double>
 
-    @Query(
-        """
+    /** Per-member total paid — used alongside total group spend to compute balances. */
+    @Query("""
+        SELECT COALESCE(SUM(amount), 0.0)
+        FROM payments
+        WHERE paidByMemberId = :memberId
+    """)
+    suspend fun getTotalPaidByMember(memberId: Long): Double
+
+    @Query("""
         SELECT purchaseDate AS date, (amount / quantity) AS pricePerCan
         FROM payments
         WHERE quantity > 0
         ORDER BY purchaseDate ASC
-        """
-    )
+    """)
     fun observePriceTrend(): Flow<List<PriceTrendPoint>>
 
     @Query("SELECT COUNT(*) FROM payments WHERE purchaseDate >= :since")
