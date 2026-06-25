@@ -5,6 +5,7 @@ import com.watercantracker.app.data.local.WaterCanDatabase
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
 import com.watercantracker.app.data.local.dao.PaymentDao
+import com.watercantracker.app.data.local.dao.SettlementDao
 import com.watercantracker.app.data.local.dao.SettingsDao
 import dagger.Module
 import dagger.Provides
@@ -26,4 +27,5 @@ object DatabaseModule {
     @Provides fun providePaymentDao(db: WaterCanDatabase): PaymentDao = db.paymentDao()
     @Provides fun provideSettingsDao(db: WaterCanDatabase): SettingsDao = db.settingsDao()
     @Provides fun provideNotificationDao(db: WaterCanDatabase): NotificationDao = db.notificationDao()
+    @Provides fun provideSettlementDao(db: WaterCanDatabase): SettlementDao = db.settlementDao()
 }

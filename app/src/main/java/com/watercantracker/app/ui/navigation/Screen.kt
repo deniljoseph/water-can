@@ -14,19 +14,20 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String) {
-    object Dashboard : Screen("dashboard")
-    object Payments : Screen("payments")
-    object AddPayment : Screen("add_payment")
+    object Dashboard   : Screen("dashboard")
+    object Payments    : Screen("payments")
+    object AddPayment  : Screen("add_payment")
     object EditPayment : Screen("edit_payment/{paymentId}") {
         fun createRoute(id: Long) = "edit_payment/$id"
     }
-    object Members : Screen("members")
-    object AddMember : Screen("add_member")
+    object Members    : Screen("members")
+    object AddMember  : Screen("add_member")
     object EditMember : Screen("edit_member/{memberId}") {
         fun createRoute(id: Long) = "edit_member/$id"
     }
-    object Reports : Screen("reports")
-    object Settings : Screen("settings")
+    object Reports    : Screen("reports")
+    object Settings   : Screen("settings")
+    object Settlement : Screen("settlement")
 }
 
 data class BottomNavItem(
@@ -37,34 +38,9 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(
-        screen = Screen.Dashboard,
-        label = "Dashboard",
-        selectedIcon = Icons.Rounded.Dashboard,
-        unselectedIcon = Icons.Outlined.Dashboard
-    ),
-    BottomNavItem(
-        screen = Screen.Payments,
-        label = "Payments",
-        selectedIcon = Icons.Rounded.History,
-        unselectedIcon = Icons.Outlined.History
-    ),
-    BottomNavItem(
-        screen = Screen.Members,
-        label = "Members",
-        selectedIcon = Icons.Rounded.Group,
-        unselectedIcon = Icons.Outlined.Group
-    ),
-    BottomNavItem(
-        screen = Screen.Reports,
-        label = "Reports",
-        selectedIcon = Icons.Rounded.Analytics,
-        unselectedIcon = Icons.Outlined.Analytics
-    ),
-    BottomNavItem(
-        screen = Screen.Settings,
-        label = "Settings",
-        selectedIcon = Icons.Rounded.Settings,
-        unselectedIcon = Icons.Outlined.Settings
-    )
+    BottomNavItem(Screen.Dashboard, "Dashboard", Icons.Rounded.Dashboard,   Icons.Outlined.Dashboard),
+    BottomNavItem(Screen.Payments,  "Payments",  Icons.Rounded.History,     Icons.Outlined.History),
+    BottomNavItem(Screen.Members,   "Members",   Icons.Rounded.Group,       Icons.Outlined.Group),
+    BottomNavItem(Screen.Reports,   "Reports",   Icons.Rounded.Analytics,   Icons.Outlined.Analytics),
+    BottomNavItem(Screen.Settings,  "Settings",  Icons.Rounded.Settings,    Icons.Outlined.Settings)
 )
