@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -50,32 +49,34 @@ fun AddEditPaymentScreen(
 
     // ── Form state ────────────────────────────────────────────────────────────
     var quantityText by remember { mutableStateOf("1") }
-    var amountText by remember { mutableStateOf("") }
+    var amountText   by remember { mutableStateOf("") }
     var selectedMember by remember { mutableStateOf<MemberEntity?>(null) }
     var purchaseDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var notes by remember { mutableStateOf("") }
+    var notes  by remember { mutableStateOf("") }
     var vendor by remember { mutableStateOf("") }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
-    // Track whether user manually edited amount so auto-fill doesn't overwrite their input
-    var amountManuallyEdited by remember { mutableStateOf(false) }
+    // Prevents auto-fill from overwriting a value the user typed manually
+    var userEditedAmount by remember { mutableStateOf(false) }
 
-    // ── Derived values ────────────────────────────────────────────────────────
-    val quantityInt = quantityText.toIntOrNull()?.coerceAtLeast(0) ?: 0
-    val enteredAmount = amountText.toDoubleOrNull() ?: 0.0
-    val expectedAmount = if (pricePerCan > 0 && quantityInt > 0) pricePerCan * quantityInt else 0.0
-    val isPartialPayment = expectedAmount > 0.01 && enteredAmount > 0.01 && enteredAmount < expectedAmount - 0.01
+    // ── Derived ───────────────────────────────────────────────────────────────
+    val quantityInt   = quantityText.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    // Parse whatever the user typed — no stripping, trust the decimal keyboard
+    val enteredAmount = amountText.trim().toDoubleOrNull() ?: -1.0
+    val expectedAmount = if (pricePerCan > 0.0 && quantityInt > 0) pricePerCan * quantityInt else 0.0
+    val isPartialPayment = expectedAmount > 0.01
+            && enteredAmount > 0.0
+            && enteredAmount < (expectedAmount - 0.01)
     val shortfall = if (isPartialPayment) expectedAmount - enteredAmount else 0.0
 
-    // ── Auto-fill amount from price-per-can when quantity changes ─────────────
-    // Only auto-fill if: price is set, not editing existing, user hasn't manually changed amount
+    // ── Auto-fill amount when quantity changes (only if price set & not editing) ──
     LaunchedEffect(quantityText, pricePerCan) {
-        if (!isEditing && !amountManuallyEdited && pricePerCan > 0) {
+        if (!isEditing && !userEditedAmount && pricePerCan > 0.0) {
             val qty = quantityText.toIntOrNull() ?: 0
             if (qty > 0) amountText = String.format("%.2f", pricePerCan * qty)
         }
     }
 
-    // ── Default payer to first active member ──────────────────────────────────
+    // ── Default payer ─────────────────────────────────────────────────────────
     LaunchedEffect(state.members) {
         if (!isEditing && selectedMember == null) {
             selectedMember = state.members.firstOrNull { it.isActive }
@@ -86,35 +87,34 @@ fun AddEditPaymentScreen(
     LaunchedEffect(paymentId, state.payments) {
         if (isEditing && paymentId != null) {
             state.payments.firstOrNull { it.id == paymentId }?.let { p ->
-                quantityText = p.quantity.toString()
-                // Format existing amount properly — this was the main bug (stored as 0.0)
-                amountText = if (p.amount > 0) String.format("%.2f", p.amount) else ""
-                purchaseDate = p.purchaseDate
-                notes = p.notes ?: ""
-                vendor = p.vendorName ?: ""
-                selectedMember = state.members.firstOrNull { it.id == p.paidByMemberId }
-                amountManuallyEdited = true // don't overwrite loaded value
+                quantityText    = p.quantity.toString()
+                amountText      = String.format("%.2f", p.amount)
+                purchaseDate    = p.purchaseDate
+                notes           = p.notes ?: ""
+                vendor          = p.vendorName ?: ""
+                selectedMember  = state.members.firstOrNull { it.id == p.paidByMemberId }
+                userEditedAmount = true
             }
         }
     }
 
-    // ── Validation ────────────────────────────────────────────────────────────
+    // ── Validation errors (shown only after save attempt) ────────────────────
     var quantityError by remember { mutableStateOf<String?>(null) }
-    var amountError by remember { mutableStateOf<String?>(null) }
-    var memberError by remember { mutableStateOf(false) }
+    var amountError   by remember { mutableStateOf<String?>(null) }
+    var memberError   by remember { mutableStateOf(false) }
 
     fun validate(): Boolean {
         quantityError = when {
-            quantityText.isBlank() -> "Enter number of cans"
-            quantityText.toIntOrNull() == null -> "Must be a whole number"
-            quantityInt <= 0 -> "Must be at least 1"
-            else -> null
+            quantityText.isBlank()          -> "Enter number of cans"
+            quantityInt <= 0                -> "Must be at least 1"
+            else                            -> null
         }
+        // Re-parse here to catch any trailing dots etc.
+        val parsedAmount = amountText.trim().trimEnd('.').toDoubleOrNull() ?: 0.0
         amountError = when {
-            amountText.isBlank() -> "Enter the amount paid"
-            amountText.toDoubleOrNull() == null -> "Must be a valid number"
-            enteredAmount <= 0 -> "Amount must be greater than 0"
-            else -> null
+            amountText.isBlank()            -> "Enter the amount paid"
+            parsedAmount <= 0.0             -> "Amount must be greater than 0"
+            else                            -> null
         }
         memberError = selectedMember == null
         return quantityError == null && amountError == null && !memberError
@@ -123,20 +123,22 @@ fun AddEditPaymentScreen(
     fun onSave() {
         focusManager.clearFocus()
         if (!validate()) return
-        val member = selectedMember ?: return
-        val finalAmount = amountText.toDoubleOrNull() ?: return
+        val member      = selectedMember ?: return
+        val finalAmount = amountText.trim().trimEnd('.').toDoubleOrNull() ?: return
 
         if (isEditing && paymentId != null) {
             val existing = state.payments.firstOrNull { it.id == paymentId } ?: return
-            viewModel.updatePayment(existing.copy(
-                quantity           = quantityInt,
-                amount             = finalAmount,
-                paidByMemberId     = member.id,
-                paidByNameSnapshot = member.name,
-                purchaseDate       = purchaseDate,
-                notes              = notes.trim().takeIf { it.isNotEmpty() },
-                vendorName         = vendor.trim().takeIf { it.isNotEmpty() }
-            ))
+            viewModel.updatePayment(
+                existing.copy(
+                    quantity           = quantityInt,
+                    amount             = finalAmount,
+                    paidByMemberId     = member.id,
+                    paidByNameSnapshot = member.name,
+                    purchaseDate       = purchaseDate,
+                    notes              = notes.trim().takeIf { it.isNotEmpty() },
+                    vendorName         = vendor.trim().takeIf { it.isNotEmpty() }
+                )
+            )
         } else {
             viewModel.addPayment(
                 quantityInt, finalAmount, member, purchaseDate,
@@ -160,7 +162,12 @@ fun AddEditPaymentScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isEditing) "Edit Payment" else "Record Payment", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        if (isEditing) "Edit Payment" else "Record Payment",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
                 }
@@ -177,10 +184,18 @@ fun AddEditPaymentScreen(
         ) {
 
             // ── Price banner ──────────────────────────────────────────────────
-            if (pricePerCan > 0) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            if (pricePerCan > 0.0) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Info, null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Price per can: ${formatAmount(pricePerCan, currency)}" +
@@ -193,7 +208,10 @@ fun AddEditPaymentScreen(
             }
 
             // ── Member selector ───────────────────────────────────────────────
-            ExposedDropdownMenuBox(expanded = memberDropdownExpanded, onExpandedChange = { memberDropdownExpanded = it }) {
+            ExposedDropdownMenuBox(
+                expanded = memberDropdownExpanded,
+                onExpandedChange = { memberDropdownExpanded = it }
+            ) {
                 OutlinedTextField(
                     value = selectedMember?.name ?: "",
                     onValueChange = {},
@@ -204,11 +222,18 @@ fun AddEditPaymentScreen(
                     supportingText = if (memberError) {{ Text("Please select who paid") }} else null,
                     modifier = Modifier.fillMaxWidth().menuAnchor()
                 )
-                ExposedDropdownMenu(expanded = memberDropdownExpanded, onDismissRequest = { memberDropdownExpanded = false }) {
+                ExposedDropdownMenu(
+                    expanded = memberDropdownExpanded,
+                    onDismissRequest = { memberDropdownExpanded = false }
+                ) {
                     state.members.filter { it.isActive }.forEach { member ->
                         DropdownMenuItem(
                             text = { Text(member.name) },
-                            onClick = { selectedMember = member; memberDropdownExpanded = false; memberError = false }
+                            onClick = {
+                                selectedMember = member
+                                memberDropdownExpanded = false
+                                memberError = false
+                            }
                         )
                     }
                 }
@@ -217,60 +242,71 @@ fun AddEditPaymentScreen(
             // ── Quantity ──────────────────────────────────────────────────────
             OutlinedTextField(
                 value = quantityText,
-                onValueChange = {
-                    quantityText = it.filter { c -> c.isDigit() }
+                onValueChange = { v ->
+                    // Only allow digits for quantity
+                    quantityText = v.filter { it.isDigit() }
                     quantityError = null
-                    amountManuallyEdited = false  // allow re-auto-fill when qty changes
+                    userEditedAmount = false // allow re-auto-fill
                 },
                 label = { Text("Number of cans *") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
                 isError = quantityError != null,
                 supportingText = quantityError?.let { err -> { Text(err) } },
                 modifier = Modifier.fillMaxWidth()
             )
 
             // ── Amount ────────────────────────────────────────────────────────
+            // IMPORTANT: No character filtering here — let the system decimal keyboard
+            // handle input. We only validate on save. Filtering was causing the bug
+            // where "11.00" became unparseable.
             OutlinedTextField(
                 value = amountText,
-                onValueChange = {
-                    // Only allow digits and a single decimal point
-                    val filtered = it.filter { c -> c.isDigit() || c == '.' }
-                        .let { s ->
-                            val dotIdx = s.indexOf('.')
-                            if (dotIdx >= 0) s.substring(0, dotIdx + 1) + s.substring(dotIdx + 1).filter { c -> c.isDigit() }
-                            else s
-                        }
-                    amountText = filtered
+                onValueChange = { v ->
+                    amountText = v
                     amountError = null
-                    amountManuallyEdited = true
+                    userEditedAmount = true
                 },
                 label = { Text("Amount paid ($currency) *") },
-                placeholder = { Text("e.g. 25.50") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                placeholder = { Text("e.g. 11.00") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Next
+                ),
                 isError = amountError != null,
                 supportingText = when {
                     amountError != null -> { { Text(amountError!!) } }
-                    isPartialPayment -> { {
-                        Text("⚠ Partial — ${formatAmount(shortfall, currency)} short of full payment", color = MaterialTheme.colorScheme.error)
+                    isPartialPayment    -> { {
+                        Text(
+                            "⚠ Partial — ${formatAmount(shortfall, currency)} short of full payment",
+                            color = MaterialTheme.colorScheme.error
+                        )
                     } }
-                    expectedAmount > 0.01 && enteredAmount >= expectedAmount - 0.01 && enteredAmount > 0 -> { {
-                        Text("✓ Full payment covered", color = MaterialTheme.colorScheme.primary)
+                    expectedAmount > 0.01 && enteredAmount >= expectedAmount - 0.01 -> { {
+                        Text("✓ Full payment", color = MaterialTheme.colorScheme.primary)
                     } }
                     else -> null
                 },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // ── Partial payment warning card ──────────────────────────────────
+            // ── Partial warning ───────────────────────────────────────────────
             if (isPartialPayment) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text("Partial Payment Recorded", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                        Text("Partial Payment",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "${selectedMember?.name ?: "This member"} will show as owing " +
-                                    "${formatAmount(shortfall, currency)} in the Balances tab.",
+                            "${selectedMember?.name ?: "This member"} will owe " +
+                                    "${formatAmount(shortfall, currency)} shown in Balances tab.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
