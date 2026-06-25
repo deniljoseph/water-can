@@ -59,16 +59,19 @@ interface PaymentDao {
     @Query("DELETE FROM payments")
     suspend fun deleteAllPayments()
 
+    // ── Monthly summary: pass monthStart/monthEnd so the DAO is stateless ─────
+    // FIX: removed GROUP BY + HAVING (which caused totalCans to be wrong when
+    // there was only one distinct yearMonth value). Instead, we aggregate the
+    // entire filtered range directly. The yearMonth column is computed from
+    // monthStart for the caller to use as a label.
     @Query("""
-        SELECT strftime('%Y-%m', purchaseDate / 1000, 'unixepoch') AS yearMonth,
-               COALESCE(SUM(quantity), 0)   AS totalCans,
-               COALESCE(SUM(amount),   0.0) AS totalAmount,
-               COUNT(*)                     AS paymentCount
+        SELECT
+            strftime('%Y-%m', :monthStart / 1000, 'unixepoch')  AS yearMonth,
+            COALESCE(SUM(quantity), 0)                           AS totalCans,
+            COALESCE(SUM(amount),   0.0)                         AS totalAmount,
+            COUNT(*)                                             AS paymentCount
         FROM payments
         WHERE purchaseDate >= :monthStart AND purchaseDate < :monthEnd
-        GROUP BY yearMonth
-        HAVING yearMonth IS NOT NULL
-        LIMIT 1
     """)
     fun observeMonthlySummary(monthStart: Long, monthEnd: Long): Flow<MonthlySpendingSummary?>
 
@@ -103,17 +106,8 @@ interface PaymentDao {
     """)
     fun observeMemberStats(): Flow<List<MemberStats>>
 
-    /** Total amount paid across ALL payments — used to compute fair shares. */
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM payments")
     fun observeTotalGroupSpend(): Flow<Double>
-
-    /** Per-member total paid — used alongside total group spend to compute balances. */
-    @Query("""
-        SELECT COALESCE(SUM(amount), 0.0)
-        FROM payments
-        WHERE paidByMemberId = :memberId
-    """)
-    suspend fun getTotalPaidByMember(memberId: Long): Double
 
     @Query("""
         SELECT purchaseDate AS date, (amount / quantity) AS pricePerCan
