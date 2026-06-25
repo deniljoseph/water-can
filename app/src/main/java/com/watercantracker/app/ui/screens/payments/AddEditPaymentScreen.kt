@@ -66,16 +66,22 @@ fun AddEditPaymentScreen(
     val isPartialPayment = expectedAmount > 0.01 && enteredAmount > 0.01 && enteredAmount < expectedAmount - 0.01
     val shortfall = if (isPartialPayment) expectedAmount - enteredAmount else 0.0
 
-    // ── Auto-fill amount from price-per-can when quantity changes ─────────────
-    // Only auto-fill if: price is set, not editing existing, user hasn't manually changed amount
-    LaunchedEffect(quantityText, pricePerCan) {
-        if (!isEditing && !amountManuallyEdited && pricePerCan > 0) {
-            val qty = quantityText.toIntOrNull() ?: 0
-            if (qty > 0) amountText = String.format("%.2f", pricePerCan * qty)
+    // Derived: expected full amount based on price-per-can setting
+    val quantityInt = quantity.toIntOrNull() ?: 0
+    val expectedAmount = if (pricePerCan > 0 && quantityInt > 0) pricePerCan * quantityInt else 0.0
+    val enteredAmount = amount.toDoubleOrNull() ?: 0.0
+    val isPartialPayment = expectedAmount > 0 && enteredAmount > 0 && enteredAmount < expectedAmount
+    val shortfall = if (isPartialPayment) expectedAmount - enteredAmount else 0.0
+
+    // Auto-fill amount when quantity changes and price is set
+    LaunchedEffect(quantity, pricePerCan) {
+        if (!isEditing && pricePerCan > 0) {
+            val qty = quantity.toIntOrNull() ?: 0
+            if (qty > 0) amount = String.format("%.2f", pricePerCan * qty)
         }
     }
 
-    // ── Default payer to first active member ──────────────────────────────────
+    // Pre-fill next active member for new payments
     LaunchedEffect(state.members) {
         if (!isEditing && selectedMember == null) {
             selectedMember = state.members.firstOrNull { it.isActive }
@@ -98,9 +104,8 @@ fun AddEditPaymentScreen(
         }
     }
 
-    // ── Validation ────────────────────────────────────────────────────────────
-    var quantityError by remember { mutableStateOf<String?>(null) }
-    var amountError by remember { mutableStateOf<String?>(null) }
+    var quantityError by remember { mutableStateOf(false) }
+    var amountError by remember { mutableStateOf(false) }
     var memberError by remember { mutableStateOf(false) }
 
     fun validate(): Boolean {
@@ -124,31 +129,27 @@ fun AddEditPaymentScreen(
         focusManager.clearFocus()
         if (!validate()) return
         val member = selectedMember ?: return
-        val finalAmount = amountText.toDoubleOrNull() ?: return
-
         if (isEditing && paymentId != null) {
             val existing = state.payments.firstOrNull { it.id == paymentId } ?: return
             viewModel.updatePayment(existing.copy(
-                quantity           = quantityInt,
-                amount             = finalAmount,
-                paidByMemberId     = member.id,
+                quantity = quantityInt,
+                amount = enteredAmount,
+                paidByMemberId = member.id,
                 paidByNameSnapshot = member.name,
-                purchaseDate       = purchaseDate,
-                notes              = notes.trim().takeIf { it.isNotEmpty() },
-                vendorName         = vendor.trim().takeIf { it.isNotEmpty() }
+                purchaseDate = purchaseDate,
+                notes = notes.trim().takeIf { it.isNotEmpty() },
+                vendorName = vendor.trim().takeIf { it.isNotEmpty() }
             ))
         } else {
             viewModel.addPayment(
-                quantityInt, finalAmount, member, purchaseDate,
+                quantityInt, enteredAmount, member, purchaseDate,
                 notes.trim().takeIf { it.isNotEmpty() },
-                vendor.trim().takeIf { it.isNotEmpty() },
-                null
+                vendor.trim().takeIf { it.isNotEmpty() }, null
             )
         }
         onBack()
     }
 
-    // ── Date picker ───────────────────────────────────────────────────────────
     val cal = Calendar.getInstance().apply { timeInMillis = purchaseDate }
     val datePicker = DatePickerDialog(
         context,
@@ -176,15 +177,26 @@ fun AddEditPaymentScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
-            // ── Price banner ──────────────────────────────────────────────────
+            // ── Price-per-can info banner ──────────────────────────────────────
             if (pricePerCan > 0) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Info, null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "Price per can: ${formatAmount(pricePerCan, currency)}" +
-                                    if (quantityInt > 0) "  •  Full cost: ${formatAmount(expectedAmount, currency)}" else "",
+                            "Price per can: ${formatAmount(pricePerCan, currency)}  •  " +
+                                    "Full amount for $quantityInt can${if (quantityInt != 1) "s" else ""}: " +
+                                    if (expectedAmount > 0) formatAmount(expectedAmount, currency) else "—",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -193,7 +205,10 @@ fun AddEditPaymentScreen(
             }
 
             // ── Member selector ───────────────────────────────────────────────
-            ExposedDropdownMenuBox(expanded = memberDropdownExpanded, onExpandedChange = { memberDropdownExpanded = it }) {
+            ExposedDropdownMenuBox(
+                expanded = memberDropdownExpanded,
+                onExpandedChange = { memberDropdownExpanded = it }
+            ) {
                 OutlinedTextField(
                     value = selectedMember?.name ?: "",
                     onValueChange = {},
@@ -231,46 +246,47 @@ fun AddEditPaymentScreen(
 
             // ── Amount ────────────────────────────────────────────────────────
             OutlinedTextField(
-                value = amountText,
-                onValueChange = {
-                    // Only allow digits and a single decimal point
-                    val filtered = it.filter { c -> c.isDigit() || c == '.' }
-                        .let { s ->
-                            val dotIdx = s.indexOf('.')
-                            if (dotIdx >= 0) s.substring(0, dotIdx + 1) + s.substring(dotIdx + 1).filter { c -> c.isDigit() }
-                            else s
-                        }
-                    amountText = filtered
-                    amountError = null
-                    amountManuallyEdited = true
+                value = amount,
+                onValueChange = { amount = it; amountError = false },
+                label = {
+                    Text(if (pricePerCan > 0) "Amount paid (partial allowed) *" else "Total amount paid *")
                 },
-                label = { Text("Amount paid ($currency) *") },
-                placeholder = { Text("e.g. 25.50") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
-                isError = amountError != null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                leadingIcon = { Text(currency, modifier = Modifier.padding(start = 12.dp)) },
+                isError = amountError,
                 supportingText = when {
-                    amountError != null -> { { Text(amountError!!) } }
-                    isPartialPayment -> { {
-                        Text("⚠ Partial — ${formatAmount(shortfall, currency)} short of full payment", color = MaterialTheme.colorScheme.error)
-                    } }
-                    expectedAmount > 0.01 && enteredAmount >= expectedAmount - 0.01 && enteredAmount > 0 -> { {
-                        Text("✓ Full payment covered", color = MaterialTheme.colorScheme.primary)
-                    } }
+                    amountError -> {{ Text("Enter a valid amount") }}
+                    isPartialPayment -> {{
+                        Text(
+                            "⚠ Partial payment — ${formatAmount(shortfall, currency)} still owed",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }}
+                    expectedAmount > 0 && enteredAmount >= expectedAmount -> {{
+                        Text("✓ Full payment", color = MaterialTheme.colorScheme.primary)
+                    }}
                     else -> null
                 },
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // ── Partial payment warning card ──────────────────────────────────
+            // ── Partial payment info card ─────────────────────────────────────
             if (isPartialPayment) {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text("Partial Payment Recorded", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "Partial Payment",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "${selectedMember?.name ?: "This member"} will show as owing " +
-                                    "${formatAmount(shortfall, currency)} in the Balances tab.",
+                            "${selectedMember?.name ?: "This person"} will owe ${formatAmount(shortfall, currency)} " +
+                                    "after this payment. This will show in the Balances section.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
