@@ -48,21 +48,19 @@ fun AddEditPaymentScreen(
     val isEditing = paymentId != null
 
     // ── Form state ────────────────────────────────────────────────────────────
-    // FIX: Start quantity as EMPTY string so the field is blank on open.
-    // Default "1" caused users to append digits (e.g. type "2" → "12") without
-    // first clearing the pre-filled value.
-    var quantityText   by remember { mutableStateOf("") }
-    var amountText     by remember { mutableStateOf("") }
-    var selectedMember by remember { mutableStateOf<MemberEntity?>(null) }
-    var purchaseDate   by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var notes          by remember { mutableStateOf("") }
-    var vendor         by remember { mutableStateOf("") }
+    var quantityText     by remember { mutableStateOf("") }
+    var amountText       by remember { mutableStateOf("") }
+    // FIX: No default member — user must explicitly select who paid
+    var selectedMember   by remember { mutableStateOf<MemberEntity?>(null) }
+    var purchaseDate     by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var notes            by remember { mutableStateOf("") }
+    var vendor           by remember { mutableStateOf("") }
     var memberDropdownExpanded by remember { mutableStateOf(false) }
     var userEditedAmount by remember { mutableStateOf(false) }
 
     // ── Derived ───────────────────────────────────────────────────────────────
-    val quantityInt   = quantityText.toIntOrNull()?.coerceAtLeast(0) ?: 0
-    val enteredAmount = amountText.trim().toDoubleOrNull() ?: -1.0
+    val quantityInt    = quantityText.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    val enteredAmount  = amountText.trim().toDoubleOrNull() ?: -1.0
     val expectedAmount = if (pricePerCan > 0.0 && quantityInt > 0) pricePerCan * quantityInt else 0.0
     val isPartialPayment = expectedAmount > 0.01
             && enteredAmount > 0.0
@@ -74,13 +72,6 @@ fun AddEditPaymentScreen(
         if (!isEditing && !userEditedAmount && pricePerCan > 0.0) {
             val qty = quantityText.toIntOrNull() ?: 0
             amountText = if (qty > 0) String.format("%.2f", pricePerCan * qty) else ""
-        }
-    }
-
-    // ── Default payer ─────────────────────────────────────────────────────────
-    LaunchedEffect(state.members) {
-        if (!isEditing && selectedMember == null) {
-            selectedMember = state.members.firstOrNull { it.isActive }
         }
     }
 
@@ -161,7 +152,6 @@ fun AddEditPaymentScreen(
         cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
     )
 
-    // ── UI ────────────────────────────────────────────────────────────────────
     Scaffold(
         topBar = {
             TopAppBar(
@@ -196,11 +186,9 @@ fun AddEditPaymentScreen(
                         Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Rounded.Info, null,
+                        Icon(Icons.Rounded.Info, null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                            modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Price per can: ${formatAmount(pricePerCan, currency)}" +
@@ -222,6 +210,7 @@ fun AddEditPaymentScreen(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Paid by *") },
+                    placeholder = { Text("Select who paid") },
                     trailingIcon = { Icon(Icons.Rounded.KeyboardArrowDown, null) },
                     isError = memberError,
                     supportingText = if (memberError) {{ Text("Please select who paid") }} else null,
@@ -248,15 +237,11 @@ fun AddEditPaymentScreen(
             OutlinedTextField(
                 value = quantityText,
                 onValueChange = { v ->
-                    // Allow only digits — quantity is always a whole number
-                    val digits = v.filter { it.isDigit() }
-                    quantityText = digits
+                    quantityText = v.filter { it.isDigit() }
                     quantityError = null
-                    // Reset so auto-fill can recalculate for the new quantity
                     userEditedAmount = false
                 },
                 label = { Text("Number of cans *") },
-                // Placeholder shows "1" as a hint without pre-filling the field
                 placeholder = { Text("e.g. 1") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,

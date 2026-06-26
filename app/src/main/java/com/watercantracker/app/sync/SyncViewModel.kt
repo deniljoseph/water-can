@@ -32,55 +32,61 @@ class SyncViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    private val _qrBitmap      = MutableStateFlow<Bitmap?>(null)
-    private val _joiningRoomId = MutableStateFlow("")
-    private val _isCreating    = MutableStateFlow(false)
-    private val _isJoining     = MutableStateFlow(false)
+    private val _qrBitmap   = MutableStateFlow<Bitmap?>(null)
+    private val _joinRoomId  = MutableStateFlow("")
+    private val _isCreating  = MutableStateFlow(false)
+    private val _isJoining   = MutableStateFlow(false)
 
     val uiState: StateFlow<SyncUiState> = combine(
         syncManager.syncState,
         settingsRepository.observeSettings(),
         _qrBitmap,
-        _joiningRoomId
+        _joinRoomId
     ) { syncState, settings, qr, joinId ->
         SyncUiState(
-            syncState       = syncState,
-            roomId          = settings.firebaseRoomId,
-            isMaster        = settings.isMasterDevice,
-            qrBitmap        = qr,
-            isCreatingRoom  = _isCreating.value,
-            isJoiningRoom   = _isJoining.value,
-            joinRoomId      = joinId,
-            error           = syncState.error
+            syncState      = syncState,
+            roomId         = settings.firebaseRoomId,
+            isMaster       = settings.isMasterDevice,
+            qrBitmap       = qr,
+            isCreatingRoom = _isCreating.value,
+            isJoiningRoom  = _isJoining.value,
+            joinRoomId     = joinId,
+            error          = syncState.error
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SyncUiState())
 
     init {
-        // Re-attach listener if we already have a room configured
+        // Re-attach listener if we already have a room from a previous session
         viewModelScope.launch {
             val settings = settingsRepository.getSettings()
-            settings.firebaseRoomId?.let { roomId ->
+            val roomId = settings.firebaseRoomId
+            if (roomId != null) {
                 syncManager.startListening(roomId, settings.isMasterDevice)
-                if (settings.isMasterDevice) generateQr(roomId)
+                if (settings.isMasterDevice) {
+                    _qrBitmap.update { qrHelper.generateRoomQr(roomId) }
+                }
             }
         }
     }
 
     fun createRoom() = viewModelScope.launch {
+        if (_isCreating.value) return@launch
         _isCreating.update { true }
         try {
             val roomId = syncManager.createRoom()
-            generateQr(roomId)
+            _qrBitmap.update { qrHelper.generateRoomQr(roomId) }
+        } catch (e: Exception) {
+            // Error state is already set inside FirebaseSyncManager
         } finally {
             _isCreating.update { false }
         }
     }
 
-    fun setJoinRoomId(id: String) = _joiningRoomId.update { id }
+    fun setJoinRoomId(id: String) = _joinRoomId.update { id.trim() }
 
     fun joinRoom() = viewModelScope.launch {
-        val roomId = _joiningRoomId.value.trim()
-        if (roomId.isBlank()) return@launch
+        val roomId = _joinRoomId.value.trim()
+        if (roomId.isBlank() || _isJoining.value) return@launch
         _isJoining.update { true }
         try {
             syncManager.joinRoom(roomId)
@@ -89,24 +95,9 @@ class SyncViewModel @Inject constructor(
         }
     }
 
-    fun onQrScanned(payload: String) {
-        val roomId = qrHelper.extractRoomId(payload) ?: return
-        _joiningRoomId.update { roomId }
-        joinRoom()
-    }
-
-    fun disconnect() {
+    fun disconnect() = viewModelScope.launch {
         syncManager.disconnect()
-        viewModelScope.launch { settingsRepository.clearFirebaseRoom() }
         _qrBitmap.update { null }
-    }
-
-    private fun generateQr(roomId: String) {
-        _qrBitmap.update { qrHelper.generateRoomQr(roomId) }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        // Don't stop listening on ViewModel cleared — keep syncing in background
+        _joinRoomId.update { "" }
     }
 }

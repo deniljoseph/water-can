@@ -18,6 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +36,9 @@ fun SyncScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Live Sync", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") } }
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
+                }
             )
         }
     ) { padding ->
@@ -44,42 +48,58 @@ fun SyncScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+
             // ── Status banner ─────────────────────────────────────────────────
             StatusBanner(state.syncState)
 
-            if (state.roomId == null) {
-                // ── No room yet: create or join ───────────────────────────────
-                SetupCard(
-                    isCreating    = state.isCreatingRoom,
-                    isJoining     = state.isJoiningRoom,
-                    joinRoomId    = state.joinRoomId,
-                    onJoinIdChange = viewModel::setJoinRoomId,
-                    onCreateRoom  = viewModel::createRoom,
-                    onJoinRoom    = viewModel::joinRoom
-                )
-            } else if (state.isMaster) {
-                // ── Master device: show QR ────────────────────────────────────
-                MasterCard(
-                    roomId    = state.roomId!!,
-                    qrBitmap  = state.qrBitmap,
-                    syncState = state.syncState,
-                    onCopyId  = { clipboard.setText(AnnotatedString(state.roomId!!)) },
-                    onDisconnect = { showDisconnectDialog = true }
-                )
-            } else {
-                // ── Secondary device: connected view ──────────────────────────
-                SecondaryCard(
-                    roomId       = state.roomId!!,
-                    syncState    = state.syncState,
-                    onDisconnect = { showDisconnectDialog = true }
-                )
+            when {
+                // ── Error state with retry ────────────────────────────────────
+                state.syncState.status == SyncStatus.ERROR -> {
+                    ErrorCard(
+                        error     = state.syncState.error ?: "Unknown error",
+                        onRetry   = { if (state.isMaster) viewModel.createRoom() else viewModel.joinRoom() },
+                        onReset   = { viewModel.disconnect() }
+                    )
+                }
+
+                // ── Not connected yet ─────────────────────────────────────────
+                state.roomId == null -> {
+                    SetupCard(
+                        isCreating     = state.isCreatingRoom,
+                        isJoining      = state.isJoiningRoom,
+                        joinRoomId     = state.joinRoomId,
+                        onJoinIdChange = viewModel::setJoinRoomId,
+                        onCreateRoom   = viewModel::createRoom,
+                        onJoinRoom     = viewModel::joinRoom
+                    )
+                }
+
+                // ── Master device ─────────────────────────────────────────────
+                state.isMaster -> {
+                    MasterCard(
+                        roomId       = state.roomId!!,
+                        qrBitmap     = state.qrBitmap,
+                        syncState    = state.syncState,
+                        onCopyId     = {
+                            clipboard.setText(AnnotatedString(state.roomId!!))
+                        },
+                        onDisconnect = { showDisconnectDialog = true }
+                    )
+                }
+
+                // ── Secondary device ──────────────────────────────────────────
+                else -> {
+                    SecondaryCard(
+                        roomId       = state.roomId!!,
+                        syncState    = state.syncState,
+                        onDisconnect = { showDisconnectDialog = true }
+                    )
+                }
             }
 
-            // ── How it works ──────────────────────────────────────────────────
             HowItWorksCard()
-
             Spacer(Modifier.height(bottomPadding.calculateBottomPadding()))
         }
     }
@@ -88,41 +108,88 @@ fun SyncScreen(
         AlertDialog(
             onDismissRequest = { showDisconnectDialog = false },
             title = { Text("Disconnect from sync?") },
-            text  = { Text("Your local data will be kept. You can reconnect anytime using the room ID.") },
+            text  = { Text("Your local data is kept. You can reconnect anytime using the Room ID.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.disconnect(); showDisconnectDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Disconnect") }
             },
-            dismissButton = { TextButton(onClick = { showDisconnectDialog = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showDisconnectDialog = false }) { Text("Cancel") }
+            }
         )
     }
 }
 
+// ── Status banner ─────────────────────────────────────────────────────────────
 @Composable
 private fun StatusBanner(syncState: SyncState) {
-    val (color, icon, text) = when (syncState.status) {
-        SyncStatus.IDLE     -> Triple(MaterialTheme.colorScheme.surfaceVariant, Icons.Rounded.CloudOff, "Not connected")
-        SyncStatus.SYNCING  -> Triple(MaterialTheme.colorScheme.primaryContainer, Icons.Rounded.Sync, "Syncing…")
-        SyncStatus.SUCCESS  -> Triple(MaterialTheme.colorScheme.primaryContainer, Icons.Rounded.CloudDone, "Live sync active")
-        SyncStatus.ERROR    -> Triple(MaterialTheme.colorScheme.errorContainer, Icons.Rounded.CloudOff, "Sync error")
-        SyncStatus.DISABLED -> Triple(MaterialTheme.colorScheme.surfaceVariant, Icons.Rounded.CloudOff, "Sync disabled")
+    val (color, icon, label) = when (syncState.status) {
+        SyncStatus.IDLE     -> Triple(MaterialTheme.colorScheme.surfaceVariant,      Icons.Rounded.CloudOff,  "Not connected")
+        SyncStatus.SYNCING  -> Triple(MaterialTheme.colorScheme.secondaryContainer,  Icons.Rounded.Sync,      "Connecting…")
+        SyncStatus.SUCCESS  -> Triple(MaterialTheme.colorScheme.primaryContainer,    Icons.Rounded.CloudDone, "Live sync active")
+        SyncStatus.ERROR    -> Triple(MaterialTheme.colorScheme.errorContainer,      Icons.Rounded.CloudOff,  "Sync error")
+        SyncStatus.DISABLED -> Triple(MaterialTheme.colorScheme.surfaceVariant,      Icons.Rounded.CloudOff,  "Sync disabled")
     }
     Surface(shape = MaterialTheme.shapes.medium, color = color, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
+        Row(
+            Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (syncState.status == SyncStatus.SYNCING) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(icon, null, modifier = Modifier.size(20.dp))
+            }
             Column {
-                Text(text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                syncState.error?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(label, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                syncState.lastSyncAt?.let { ts ->
+                    Text(
+                        "Last sync: ${SimpleDateFormat("d MMM HH:mm:ss", Locale.getDefault()).format(Date(ts))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
     }
 }
 
+// ── Error card ────────────────────────────────────────────────────────────────
+@Composable
+private fun ErrorCard(error: String, onRetry: () -> Unit, onReset: () -> Unit) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Sync Error", style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth()) {
+                Text(error, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(10.dp))
+            }
+            Text("Common fixes:", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf(
+                "Check internet connection",
+                "Make sure you followed FIREBASE_SETUP.md and replaced google-services.json",
+                "Verify Anonymous Auth is enabled in Firebase Console",
+                "Check Firebase Realtime Database rules allow read/write"
+            ).forEach { tip ->
+                Text("• $tip", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onReset, modifier = Modifier.weight(1f)) { Text("Reset") }
+                Button(onClick = onRetry, modifier = Modifier.weight(1f)) { Text("Retry") }
+            }
+        }
+    }
+}
+
+// ── Setup card ────────────────────────────────────────────────────────────────
 @Composable
 private fun SetupCard(
     isCreating: Boolean,
@@ -136,51 +203,63 @@ private fun SetupCard(
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Set Up Sync", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-            // Create room (master)
-            Text("This is your device (master)", style = MaterialTheme.typography.labelLarge,
+            // Create
+            Text("This is your master device", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
-            Button(
-                onClick = onCreateRoom,
-                enabled = !isCreating,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Text("Create a sync room — other devices can then join using the QR code.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onCreateRoom, enabled = !isCreating && !isJoining,
+                modifier = Modifier.fillMaxWidth()) {
                 if (isCreating) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(8.dp))
+                    Text("Creating room…")
+                } else {
+                    Icon(Icons.Rounded.AddCircle, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Create Sync Room (Master)")
                 }
-                Text("Create Sync Room")
             }
 
             HorizontalDivider()
 
-            // Join room (secondary)
+            // Join
             Text("Join another device's room", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
+            Text("Scan a QR code — or paste the Room ID below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(
                 value = joinRoomId,
                 onValueChange = onJoinIdChange,
                 label = { Text("Room ID") },
-                placeholder = { Text("Paste room ID here") },
+                placeholder = { Text("Paste Room ID here") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
                 onClick = onJoinRoom,
-                enabled = joinRoomId.isNotBlank() && !isJoining,
+                enabled = joinRoomId.isNotBlank() && !isJoining && !isCreating,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isJoining) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(8.dp))
+                    Text("Joining…")
+                } else {
+                    Icon(Icons.Rounded.Link, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Join Room")
                 }
-                Text("Join Room")
             }
         }
     }
 }
 
+// ── Master card ───────────────────────────────────────────────────────────────
 @Composable
 private fun MasterCard(
     roomId: String,
@@ -191,46 +270,57 @@ private fun MasterCard(
 ) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            Modifier.padding(20.dp),
+            Modifier.padding(20.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Your Sync Room", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Other devices scan this QR or enter the Room ID below",
+            Text("Other devices scan this QR code or paste the Room ID to join",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center)
 
-            // QR Code
-            qrBitmap?.let { bmp ->
+            if (qrBitmap != null) {
                 Image(
-                    bitmap = bmp.asImageBitmap(),
+                    bitmap = qrBitmap.asImageBitmap(),
                     contentDescription = "Sync QR Code",
                     modifier = Modifier
                         .size(220.dp)
                         .border(2.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
                         .padding(8.dp)
                 )
-            } ?: CircularProgressIndicator(modifier = Modifier.size(48.dp))
+            } else {
+                Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
 
-            // Room ID with copy
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant,
+            Surface(shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(roomId, style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Room ID", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(roomId, style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold)
+                    }
                     IconButton(onClick = onCopyId) {
-                        Icon(Icons.Rounded.ContentCopy, "Copy room ID")
+                        Icon(Icons.Rounded.ContentCopy, "Copy Room ID")
                     }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Rounded.Devices, null, tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp))
-                Text("${syncState.connectedDevices} device(s) connected",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (syncState.connectedDevices > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Rounded.Devices, null, tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp))
+                    Text("${syncState.connectedDevices} device(s) synced",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
 
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
@@ -242,51 +332,54 @@ private fun MasterCard(
     }
 }
 
+// ── Secondary card ────────────────────────────────────────────────────────────
 @Composable
 private fun SecondaryCard(roomId: String, syncState: SyncState, onDisconnect: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Connected to Sync Room", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant,
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CloudDone, null, tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Connected to Sync Room", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold)
+            }
+            Surface(shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp)) {
+                Row(Modifier.padding(10.dp)) {
                     Text("Room ID: ", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(roomId, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                 }
             }
-            syncState.lastSyncAt?.let { ts ->
-                val fmt = java.text.SimpleDateFormat("d MMM, HH:mm:ss", java.util.Locale.getDefault())
-                Text("Last synced: ${fmt.format(java.util.Date(ts))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text("This device receives updates from the master device automatically.",
+            Text("Data syncs automatically whenever the master device makes changes.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.LinkOff, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Disconnect")
+                Text("Leave Room")
             }
         }
     }
 }
 
+// ── How it works ──────────────────────────────────────────────────────────────
 @Composable
 private fun HowItWorksCard() {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("How it works", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("How Sync Works", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             listOf(
-                "🔵  Your device is the master — all data changes come from here",
-                "📱  Other devices scan the QR code or paste the Room ID to join",
-                "☁️   Data syncs in real-time via Firebase (free, no account needed on other devices)",
-                "📶  Works offline — changes sync automatically when back online",
-                "🔒  Room ID is private — only share it with your group members"
-            ).forEach { step ->
-                Text(step, style = MaterialTheme.typography.bodySmall,
+                "🔵  Your device is the master — all data changes originate here",
+                "📱  Other devices scan the QR or paste the Room ID to join as viewers",
+                "☁️   Firebase Realtime Database powers the sync (free, always-on)",
+                "📶  Offline-ready — changes sync automatically when back online",
+                "🔒  Room ID is private — only share it with your group"
+            ).forEach { line ->
+                Text(line, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
