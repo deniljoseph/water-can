@@ -31,7 +31,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
+            // applicationIdSuffix removed — keeps package name consistent across builds
             versionNameSuffix = "-debug"
         }
     }
