@@ -13,6 +13,7 @@ import com.watercantracker.app.domain.model.NextPayerResult
 import com.watercantracker.app.sync.FirebaseSyncManager
 import com.watercantracker.app.sync.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -26,7 +27,7 @@ data class DashboardUiState(
     val lastPaymentMember: MemberEntity? = null,
     val monthSummary: MonthlySpendingSummary? = null,
     val activeMemberCount: Int = 0,
-    val memberBalances: List<MemberBalance> = emptyList(),
+    val totalGroupSpend: Double = 0.0,
     val currencySymbol: String = "AED",
     val syncState: SyncState = SyncState(),
     val isLoading: Boolean = true
@@ -44,43 +45,22 @@ class DashboardViewModel @Inject constructor(
         paymentRepository.observeLastPayment(),
         paymentRepository.observeCurrentMonthSummary(),
         memberRepository.observeActiveMemberCount(),
-        memberRepository.observeActiveMembers(),
+        paymentRepository.observeTotalGroupSpend(),
         settingsRepository.observeSettings()
-    ) { lastPayment, monthSummary, activeCount, activeMembers, settings ->
+    ) { lastPayment, monthSummary, activeCount, totalSpend, settings ->
         val nextPayer  = memberRepository.resolveNextPayer(lastPayment?.paidByMemberId)
         val lastMember = lastPayment?.paidByMemberId?.let { memberRepository.getMemberById(it) }
 
-        // Compute balances for dashboard partial-payment widget
-        val totalSpend = paymentRepository.observeTotalGroupSpend()
-            .let { flow ->
-                var v = 0.0
-                try { kotlinx.coroutines.flow.first(flow).also { v = it } } catch (_: Exception) {}
-                v
-            }
-        val fairShare = if (activeMembers.isNotEmpty()) totalSpend / activeMembers.size else 0.0
-        val balances = activeMembers.map { member ->
-            val paid = 0.0 // simplified — full balance computed in MembersScreen
-            MemberBalance(
-                memberId   = member.id,
-                memberName = member.name,
-                avatarUri  = member.avatarUri,
-                isActive   = true,
-                totalPaid  = paid,
-                fairShare  = fairShare,
-                netBalance = paid - fairShare
-            )
-        }
-
         DashboardUiState(
-            nextPayerResult    = nextPayer,
-            lastPayment        = lastPayment,
-            lastPaymentMember  = lastMember,
-            monthSummary       = monthSummary,
-            activeMemberCount  = activeCount,
-            memberBalances     = balances,
-            currencySymbol     = settings.currencySymbol,
-            syncState          = syncManager.syncState.value,
-            isLoading          = false
+            nextPayerResult   = nextPayer,
+            lastPayment       = lastPayment,
+            lastPaymentMember = lastMember,
+            monthSummary      = monthSummary,
+            activeMemberCount = activeCount,
+            totalGroupSpend   = totalSpend,
+            currencySymbol    = settings.currencySymbol,
+            syncState         = syncManager.syncState.value,
+            isLoading         = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
