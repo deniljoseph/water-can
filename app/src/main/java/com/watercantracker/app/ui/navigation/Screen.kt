@@ -1,16 +1,8 @@
 package com.watercantracker.app.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Analytics
-import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.rounded.Analytics
-import androidx.compose.material.icons.rounded.Dashboard
-import androidx.compose.material.icons.rounded.Group
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String) {
@@ -28,6 +20,7 @@ sealed class Screen(val route: String) {
     object Reports    : Screen("reports")
     object Settings   : Screen("settings")
     object Settlement : Screen("settlement")
+    object Sync       : Screen("sync")
 }
 
 data class BottomNavItem(

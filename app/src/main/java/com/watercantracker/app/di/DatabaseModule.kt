@@ -2,6 +2,7 @@ package com.watercantracker.app.di
 
 import android.content.Context
 import com.watercantracker.app.data.local.WaterCanDatabase
+import com.watercantracker.app.data.local.dao.JointPaymentDao
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
 import com.watercantracker.app.data.local.dao.PaymentDao
@@ -18,8 +19,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    @Provides
-    @Singleton
+    @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WaterCanDatabase =
         WaterCanDatabase.getInstance(context)
 
@@ -28,4 +28,5 @@ object DatabaseModule {
     @Provides fun provideSettingsDao(db: WaterCanDatabase): SettingsDao = db.settingsDao()
     @Provides fun provideNotificationDao(db: WaterCanDatabase): NotificationDao = db.notificationDao()
     @Provides fun provideSettlementDao(db: WaterCanDatabase): SettlementDao = db.settlementDao()
+    @Provides fun provideJointPaymentDao(db: WaterCanDatabase): JointPaymentDao = db.jointPaymentDao()
 }

@@ -29,3 +29,13 @@
 # Keep data models used with reflection-based serialization
 -keep class com.watercantracker.app.data.local.entity.** { *; }
 -keep class com.watercantracker.app.domain.model.** { *; }
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# ZXing QR
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**

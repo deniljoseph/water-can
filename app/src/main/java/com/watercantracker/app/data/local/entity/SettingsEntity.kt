@@ -5,9 +5,10 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "settings")
 data class SettingsEntity(
-    @PrimaryKey
-    val id: Int = 1,
+    @PrimaryKey val id: Int = 1,
     val themeMode: String = "SYSTEM",
+    val darkModeVariant: String = "DARK",
+    val accentColor: String = "TEAL",
     val defaultPricePerCan: Double = 0.0,
     val remindersEnabled: Boolean = true,
     val overdueRemindersEnabled: Boolean = true,
@@ -15,5 +16,8 @@ data class SettingsEntity(
     val reminderMinute: Int = 0,
     val overdueThresholdDays: Int = 3,
     val lastMonthlyResetAt: Long? = null,
-    val currencySymbol: String = "AED"   // Changed from $ to AED
+    val currencySymbol: String = "AED",
+    val firebaseRoomId: String? = null,
+    val isMasterDevice: Boolean = true,
+    val lastSyncAt: Long? = null
 )

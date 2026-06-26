@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -13,8 +14,8 @@ android {
         applicationId = "com.watercantracker.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3          // Incremented — never reset; each release bumps this
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
@@ -31,6 +32,7 @@ android {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
 
@@ -83,7 +85,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // Room
+    // Room — with proper migrations (no more fallbackToDestructiveMigration in release)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
@@ -108,12 +110,21 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // Excel export — POI OOXML (pulls in poi-core transitively)
+    // Firebase (free forever — Spark plan)
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-database-ktx")   // Realtime Database
+    implementation("com.google.firebase:firebase-auth-ktx")        // Anonymous auth for device identity
+
+    // QR code — generate invite QR
+    implementation("com.google.zxing:core:3.5.3")
+
+    // Excel export
     implementation("org.apache.poi:poi-ooxml:5.2.5") {
         exclude(group = "org.apache.logging.log4j")
     }
 
-    // Kotlin Serialization (for settlement JSON persistence)
+    // Google Drive backup
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // Accompanist permissions
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")

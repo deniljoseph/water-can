@@ -8,46 +8,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SettingsRepository @Inject constructor(
-    private val settingsDao: SettingsDao
-) {
+class SettingsRepository @Inject constructor(private val settingsDao: SettingsDao) {
+
     fun observeSettings(): Flow<SettingsEntity> =
         settingsDao.observeSettings().map { it ?: SettingsEntity() }
 
-    suspend fun getSettings(): SettingsEntity =
-        settingsDao.getSettings() ?: SettingsEntity()
+    suspend fun getSettings(): SettingsEntity = settingsDao.getSettings() ?: SettingsEntity()
 
-    suspend fun saveSettings(settings: SettingsEntity) {
+    suspend fun saveSettings(settings: SettingsEntity) =
         settingsDao.insertSettings(settings.copy(id = 1))
-    }
 
-    suspend fun updateTheme(mode: String) {
-        val s = getSettings()
-        saveSettings(s.copy(themeMode = mode))
-    }
+    private suspend fun update(block: SettingsEntity.() -> SettingsEntity) =
+        saveSettings(getSettings().block())
 
-    suspend fun updateReminders(enabled: Boolean) {
-        val s = getSettings()
-        saveSettings(s.copy(remindersEnabled = enabled))
-    }
-
-    suspend fun updateOverdueReminders(enabled: Boolean) {
-        val s = getSettings()
-        saveSettings(s.copy(overdueRemindersEnabled = enabled))
-    }
-
-    suspend fun updateReminderTime(hour: Int, minute: Int) {
-        val s = getSettings()
-        saveSettings(s.copy(reminderHour = hour, reminderMinute = minute))
-    }
-
-    suspend fun updateDefaultPrice(price: Double) {
-        val s = getSettings()
-        saveSettings(s.copy(defaultPricePerCan = price))
-    }
-
-    suspend fun recordMonthlyReset() {
-        val s = getSettings()
-        saveSettings(s.copy(lastMonthlyResetAt = System.currentTimeMillis()))
-    }
+    suspend fun updateTheme(mode: String)               = update { copy(themeMode = mode) }
+    suspend fun updateDarkVariant(variant: String)      = update { copy(darkModeVariant = variant) }
+    suspend fun updateAccentColor(color: String)        = update { copy(accentColor = color) }
+    suspend fun updateReminders(enabled: Boolean)       = update { copy(remindersEnabled = enabled) }
+    suspend fun updateOverdueReminders(enabled: Boolean)= update { copy(overdueRemindersEnabled = enabled) }
+    suspend fun updateReminderTime(h: Int, m: Int)      = update { copy(reminderHour = h, reminderMinute = m) }
+    suspend fun updateDefaultPrice(price: Double)       = update { copy(defaultPricePerCan = price) }
+    suspend fun recordMonthlyReset()                    = update { copy(lastMonthlyResetAt = System.currentTimeMillis()) }
+    suspend fun updateFirebaseRoom(roomId: String, isMaster: Boolean) =
+        update { copy(firebaseRoomId = roomId, isMasterDevice = isMaster, lastSyncAt = System.currentTimeMillis()) }
+    suspend fun clearFirebaseRoom() = update { copy(firebaseRoomId = null, isMasterDevice = true, lastSyncAt = null) }
+    suspend fun updateLastSync()    = update { copy(lastSyncAt = System.currentTimeMillis()) }
 }

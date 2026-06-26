@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.watercantracker.app.settlement.SettlementScreen
+import com.watercantracker.app.sync.SyncScreen
 import com.watercantracker.app.ui.screens.dashboard.DashboardScreen
 import com.watercantracker.app.ui.screens.members.AddEditMemberScreen
 import com.watercantracker.app.ui.screens.members.MembersScreen
@@ -25,8 +26,8 @@ fun WaterCanNavGraph(navController: NavHostController, bottomPadding: PaddingVal
         startDestination = Screen.Dashboard.route,
         enterTransition  = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left,  tween(220)) },
         exitTransition   = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left,  tween(220)) },
-        popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220)) },
-        popExitTransition  = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220)) }
+        popEnterTransition  = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220)) },
+        popExitTransition   = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(220)) }
     ) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
@@ -77,10 +78,19 @@ fun WaterCanNavGraph(navController: NavHostController, bottomPadding: PaddingVal
             ReportsScreen(bottomPadding = bottomPadding)
         }
         composable(Screen.Settings.route) {
-            SettingsScreen(bottomPadding = bottomPadding)
+            SettingsScreen(
+                bottomPadding = bottomPadding,
+                onSync        = { navController.navigate(Screen.Sync.route) }
+            )
         }
         composable(Screen.Settlement.route) {
             SettlementScreen(
+                bottomPadding = bottomPadding,
+                onBack        = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.Sync.route) {
+            SyncScreen(
                 bottomPadding = bottomPadding,
                 onBack        = { navController.popBackStack() }
             )

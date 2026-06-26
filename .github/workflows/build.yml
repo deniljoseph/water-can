@@ -29,6 +29,13 @@ jobs:
           /tmp/gradle-dist/gradle-8.7/bin/gradle wrapper --gradle-version=8.7
           chmod +x gradlew
 
+      # Replace placeholder google-services.json with real one from GitHub Secret
+      # To set up: repo Settings → Secrets → Actions → New secret
+      # Name: GOOGLE_SERVICES_JSON  Value: paste entire contents of your google-services.json
+      - name: Write google-services.json
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 

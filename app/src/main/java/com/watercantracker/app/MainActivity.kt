@@ -18,6 +18,8 @@ import com.watercantracker.app.notification.ReminderWorker
 import com.watercantracker.app.ui.navigation.WaterCanNavGraph
 import com.watercantracker.app.ui.navigation.bottomNavItems
 import com.watercantracker.app.ui.screens.settings.SettingsViewModel
+import com.watercantracker.app.ui.theme.AccentColor
+import com.watercantracker.app.ui.theme.DarkModeVariant
 import com.watercantracker.app.ui.theme.WaterCanTrackerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -36,7 +38,11 @@ class MainActivity : ComponentActivity() {
             val settingsVm: SettingsViewModel = hiltViewModel()
             val settingsState by settingsVm.uiState.collectAsStateWithLifecycle()
 
-            WaterCanTrackerTheme(themeMode = settingsState.themeMode) {
+            WaterCanTrackerTheme(
+                themeMode       = settingsState.themeMode,
+                darkModeVariant = settingsState.darkModeVariant,
+                accentColor     = settingsState.accentColor
+            ) {
                 WaterCanApp()
             }
         }
@@ -63,19 +69,15 @@ private fun WaterCanApp() {
                             onClick = {
                                 if (!selected) {
                                     navController.navigate(item.screen.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
                                 }
                             },
                             icon = {
-                                Icon(
-                                    if (selected) item.selectedIcon else item.unselectedIcon,
-                                    contentDescription = item.label
-                                )
+                                Icon(if (selected) item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = item.label)
                             },
                             label = { Text(item.label) }
                         )
@@ -84,11 +86,6 @@ private fun WaterCanApp() {
             }
         }
     ) { innerPadding ->
-        // Pass innerPadding into the nav graph so every screen respects
-        // the bottom nav bar height and nothing gets clipped beneath it
-        WaterCanNavGraph(
-            navController = navController,
-            bottomPadding = innerPadding
-        )
+        WaterCanNavGraph(navController = navController, bottomPadding = innerPadding)
     }
 }
