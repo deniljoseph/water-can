@@ -14,13 +14,38 @@ android {
         applicationId = "com.watercantracker.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 3          // Incremented — never reset; each release bumps this
+        versionCode = 3
         versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Consistent signing for both debug and release so incremental installs work
+    // across machines (GitHub Actions, your PC, etc.)
+    // The keystore file is injected by GitHub Actions via environment variables.
+    // For local builds, place watercan-release.jks in the app/ folder.
+    signingConfigs {
+        create("consistent") {
+            val keystoreFile = file("watercan-release.jks")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "watercan123"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "watercan"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "watercan123"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            isMinifyEnabled = false
+            versionNameSuffix = "-debug"
+            // Use the consistent signing config instead of the auto-generated debug keystore
+            signingConfig = if (file("watercan-release.jks").exists())
+                signingConfigs.getByName("consistent")
+            else
+                signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -28,11 +53,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        debug {
-            isMinifyEnabled = false
-            // applicationIdSuffix removed — keeps package name consistent across builds
-            versionNameSuffix = "-debug"
+            signingConfig = signingConfigs.getByName("consistent")
         }
     }
 
@@ -40,21 +61,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf("-opt-in=kotlin.RequiresOptIn")
     }
-
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -67,14 +84,11 @@ android {
 }
 
 dependencies {
-    // Core
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.activity:activity-compose:1.9.1")
-
-    // Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -84,52 +98,28 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    // Room — with proper migrations (no more fallbackToDestructiveMigration in release)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
-
-    // Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
-
-    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.1")
-
-    // Glance widget
     implementation("androidx.glance:glance-appwidget:1.1.0")
     implementation("androidx.glance:glance-material3:1.1.0")
-
-    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
-    // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
-
-    // Firebase (free forever — Spark plan)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-database-ktx")   // Realtime Database
-    implementation("com.google.firebase:firebase-auth-ktx")        // Anonymous auth for device identity
-
-    // QR code — generate invite QR
+    implementation("com.google.firebase:firebase-database-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.zxing:core:3.5.3")
-
-    // Excel export
     implementation("org.apache.poi:poi-ooxml:5.2.5") {
         exclude(group = "org.apache.logging.log4j")
     }
-
-    // Google Drive backup
     implementation("com.google.android.gms:play-services-auth:21.2.0")
-
-    // Accompanist permissions
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-
-    // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

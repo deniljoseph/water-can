@@ -1,0 +1,3 @@
+# Signing keystore — injected via GitHub Actions secret, never commit
+app/watercan-release.jks
+app/watercan-release.jks.b64
