@@ -7,13 +7,12 @@ import com.watercantracker.app.data.local.entity.PaymentEntity
 import com.watercantracker.app.data.repository.MemberRepository
 import com.watercantracker.app.data.repository.PaymentRepository
 import com.watercantracker.app.data.repository.SettingsRepository
-import com.watercantracker.app.domain.model.MemberBalance
 import com.watercantracker.app.domain.model.MonthlySpendingSummary
 import com.watercantracker.app.domain.model.NextPayerResult
 import com.watercantracker.app.sync.FirebaseSyncManager
 import com.watercantracker.app.sync.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -50,7 +49,6 @@ class DashboardViewModel @Inject constructor(
     ) { lastPayment, monthSummary, activeCount, totalSpend, settings ->
         val nextPayer  = memberRepository.resolveNextPayer(lastPayment?.paidByMemberId)
         val lastMember = lastPayment?.paidByMemberId?.let { memberRepository.getMemberById(it) }
-
         DashboardUiState(
             nextPayerResult   = nextPayer,
             lastPayment       = lastPayment,
@@ -67,20 +65,17 @@ class DashboardViewModel @Inject constructor(
     fun setManualNextPayer(memberId: Long) = viewModelScope.launch {
         memberRepository.setManualNextPayer(memberId)
     }
-}
 
-    /** Pull-to-refresh: forces a Firebase pull on secondary devices, then calls onDone */
+    /** Pull-to-refresh: re-attaches Firebase listener to force fresh data pull */
     fun refresh(onDone: () -> Unit) = viewModelScope.launch {
         try {
             val settings = settingsRepository.getSettings()
-            val roomId = settings.firebaseRoomId
-            if (roomId != null) {
-                // Re-attach listener — Firebase will fire onDataChange immediately
-                // with the latest server state
+            settings.firebaseRoomId?.let { roomId ->
                 syncManager.startListening(roomId, settings.isMasterDevice)
             }
         } finally {
-            kotlinx.coroutines.delay(800) // brief delay so spinner shows
+            delay(800)
             onDone()
         }
     }
+}
