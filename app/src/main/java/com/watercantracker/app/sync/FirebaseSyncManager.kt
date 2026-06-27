@@ -51,7 +51,7 @@ class FirebaseSyncManager @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val db    = FirebaseDatabase.getInstance()
+    private val db    = FirebaseDatabase.getInstance("https://water-can-tracker-a5033-default-rtdb.asia-southeast1.firebasedatabase.app")
     private val auth  = FirebaseAuth.getInstance()
 
     private val _syncState = MutableStateFlow(SyncState())
