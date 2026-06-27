@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
+import com.google.firebase.database.FirebaseDatabase
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -20,6 +21,16 @@ class WaterCanTrackerApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         FirebaseApp.initializeApp(this)
+
+        // Enable offline persistence so writes are queued locally and retried
+        // automatically when the database becomes reachable.
+        // Must be called before any other Firebase Database usage.
+        try {
+            FirebaseDatabase.getInstance().setPersistenceEnabled(true)
+        } catch (e: Exception) {
+            // Already initialized — safe to ignore on hot reloads
+        }
+
         createNotificationChannels()
     }
 
@@ -27,16 +38,16 @@ class WaterCanTrackerApp : Application(), Configuration.Provider {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannels(
             listOf(
-                NotificationChannel(CHANNEL_REMINDERS,
+                NotificationChannel(
+                    CHANNEL_REMINDERS,
                     getString(R.string.notification_channel_reminders_name),
-                    NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = getString(R.string.notification_channel_reminders_desc)
-                },
-                NotificationChannel(CHANNEL_OVERDUE,
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply { description = getString(R.string.notification_channel_reminders_desc) },
+                NotificationChannel(
+                    CHANNEL_OVERDUE,
                     getString(R.string.notification_channel_overdue_name),
-                    NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = getString(R.string.notification_channel_overdue_desc)
-                }
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = getString(R.string.notification_channel_overdue_desc) }
             )
         )
     }

@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "1053881253499",
-    "project_id": "water-can-tracker-a5033",
-    "storage_bucket": "water-can-tracker-a5033.firebasestorage.app"
+    "project_number": "YOUR_PROJECT_NUMBER",
+    "project_id": "YOUR_PROJECT_ID",
+    "storage_bucket": "YOUR_PROJECT_ID.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1053881253499:android:764db23a05a6f555faacde",
+        "mobilesdk_app_id": "1:YOUR_PROJECT_NUMBER:android:YOUR_APP_ID",
         "android_client_info": {
           "package_name": "com.watercantracker.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBofy5yUJ2aIAhDePupFGAsmN9qARDvZ0I"
+          "current_key": "YOUR_API_KEY"
         }
       ],
       "services": {

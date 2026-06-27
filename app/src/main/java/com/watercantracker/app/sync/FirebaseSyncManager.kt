@@ -74,13 +74,13 @@ class FirebaseSyncManager @Inject constructor(
 
         if (auth.currentUser != null) return
         try {
-            withTimeout(10_000L) {
+            withTimeout(30_000L) {
                 auth.signInAnonymously().await()
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             throw SyncException(
                 SyncErrorCode.AUTH_TIMEOUT,
-                "Authentication timed out after 10 s."
+                "Authentication timed out after 30 s."
             )
         } catch (e: Exception) {
             throw SyncException(SyncErrorCode.UNKNOWN, "Auth failed: ${e.message}")
@@ -97,7 +97,7 @@ class FirebaseSyncManager @Inject constructor(
             val roomId  = roomRef.key ?: throw SyncException(SyncErrorCode.UNKNOWN, "Failed to allocate room key")
 
             try {
-                withTimeout(10_000L) {
+                withTimeout(30_000L) {
                     roomRef.child("meta").setValue(
                         mapOf(
                             "masterDeviceId" to (auth.currentUser?.uid ?: "unknown"),
@@ -106,7 +106,7 @@ class FirebaseSyncManager @Inject constructor(
                     ).await()
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database write timed out after 10 s.")
+                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database write timed out after 30 s. This almost always means your Realtime Database Rules are blocking the write.")
             }
 
             pushAllToFirebase(roomId)
@@ -138,11 +138,11 @@ class FirebaseSyncManager @Inject constructor(
         try {
             ensureAuthenticated()
             val snapshot = try {
-                withTimeout(15_000L) {
+                withTimeout(30_000L) {
                     db.reference.child("rooms").child(roomId).get().await()
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database read timed out after 15 s.")
+                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database read/write timed out after 30 s. Check your Firebase Realtime Database Rules.")
             }
 
             if (!snapshot.exists()) {
@@ -179,7 +179,7 @@ class FirebaseSyncManager @Inject constructor(
                     db.reference.child("rooms/$roomId/payments/${payment.firebaseSyncId}")
                 else
                     db.reference.child("rooms/$roomId/payments").push()
-                withTimeout(8_000L) { ref.setValue(paymentToMap(payment)).await() }
+                withTimeout(30_000L) { ref.setValue(paymentToMap(payment)).await() }
                 ref.key?.let { key ->
                     if (payment.firebaseSyncId == null)
                         paymentDao.updatePayment(payment.copy(firebaseSyncId = key))
@@ -197,7 +197,7 @@ class FirebaseSyncManager @Inject constructor(
                     db.reference.child("rooms/$roomId/members/${member.firebaseSyncId}")
                 else
                     db.reference.child("rooms/$roomId/members").push()
-                withTimeout(8_000L) { ref.setValue(memberToMap(member)).await() }
+                withTimeout(30_000L) { ref.setValue(memberToMap(member)).await() }
                 ref.key?.let { key ->
                     if (member.firebaseSyncId == null)
                         memberDao.updateMember(member.copy(firebaseSyncId = key))
@@ -211,7 +211,7 @@ class FirebaseSyncManager @Inject constructor(
         if (!_syncState.value.isMaster) return
         scope.launch {
             try {
-                withTimeout(8_000L) {
+                withTimeout(30_000L) {
                     db.reference.child("rooms/$roomId/payments/$firebaseSyncId").removeValue().await()
                 }
                 touchMeta(roomId)
@@ -270,14 +270,14 @@ class FirebaseSyncManager @Inject constructor(
         memberDao.getAllMembers().forEach { m ->
             try {
                 val ref = db.reference.child("rooms/$roomId/members").push()
-                withTimeout(8_000L) { ref.setValue(memberToMap(m)).await() }
+                withTimeout(30_000L) { ref.setValue(memberToMap(m)).await() }
                 ref.key?.let { memberDao.updateMember(m.copy(firebaseSyncId = it)) }
             } catch (_: Exception) {}
         }
         paymentDao.observeAllPayments().first().forEach { p ->
             try {
                 val ref = db.reference.child("rooms/$roomId/payments").push()
-                withTimeout(8_000L) { ref.setValue(paymentToMap(p)).await() }
+                withTimeout(30_000L) { ref.setValue(paymentToMap(p)).await() }
                 ref.key?.let { paymentDao.updatePayment(p.copy(firebaseSyncId = it)) }
             } catch (_: Exception) {}
         }

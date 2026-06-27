@@ -101,7 +101,7 @@ fun SyncScreen(
         AlertDialog(
             onDismissRequest = { showDisconnectDialog = false },
             title = { Text("Disconnect from sync?") },
-            text  = { Text("Your local data is kept. You can reconnect anytime using the Room ID.") },
+            text  = { Text("Your local data is kept. Reconnect anytime with the Room ID.") },
             confirmButton = {
                 Button(onClick = { viewModel.disconnect(); showDisconnectDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
@@ -120,7 +120,7 @@ private fun StatusBanner(syncState: SyncState) {
         SyncStatus.IDLE     -> Triple(MaterialTheme.colorScheme.surfaceVariant,     Icons.Rounded.CloudOff,  "Not connected to sync")
         SyncStatus.SYNCING  -> Triple(MaterialTheme.colorScheme.secondaryContainer, Icons.Rounded.Sync,      "Connecting…")
         SyncStatus.SUCCESS  -> Triple(MaterialTheme.colorScheme.primaryContainer,   Icons.Rounded.CloudDone, "Live sync active ✓")
-        SyncStatus.ERROR    -> Triple(MaterialTheme.colorScheme.errorContainer,     Icons.Rounded.CloudOff,  "Sync error")
+        SyncStatus.ERROR    -> Triple(MaterialTheme.colorScheme.errorContainer,     Icons.Rounded.CloudOff,  "Sync error — see steps below")
         SyncStatus.DISABLED -> Triple(MaterialTheme.colorScheme.surfaceVariant,     Icons.Rounded.CloudOff,  "Sync disabled")
     }
     Surface(shape = MaterialTheme.shapes.medium, color = color, modifier = Modifier.fillMaxWidth()) {
@@ -142,7 +142,7 @@ private fun StatusBanner(syncState: SyncState) {
     }
 }
 
-// ── Error card with specific guidance per error code ──────────────────────────
+// ── Error card ────────────────────────────────────────────────────────────────
 @Composable
 private fun ErrorCard(
     errorCode: SyncErrorCode,
@@ -151,90 +151,140 @@ private fun ErrorCard(
     onRetry: () -> Unit,
     onReset: () -> Unit
 ) {
-    val (title, steps) = when (errorCode) {
+    val (title, intro, steps, rulesSnippet) = when (errorCode) {
 
-        SyncErrorCode.PLACEHOLDER_JSON -> Pair(
-            "⚙️  Firebase setup required",
-            listOf(
-                Step("1", "Open", "console.firebase.google.com", "in a browser"),
-                Step("2", "Create a project → Add Android app", "", ""),
-                Step("3", "Package name:", "com.watercantracker.app", ""),
-                Step("4", "Download", "google-services.json", "from the Firebase console"),
-                Step("5", "Replace", "app/google-services.json", "in your project with the downloaded file"),
-                Step("6", "In Firebase Console → Build → Realtime Database →", "Create Database", "(test mode)"),
-                Step("7", "Build → Authentication → Sign-in method → enable", "Anonymous", ""),
-                Step("8", "Push to GitHub → Actions will build a new APK → install it"),
-                Step("9", "Come back to this screen and tap", "Create Sync Room", "again")
-            )
+        SyncErrorCode.PLACEHOLDER_JSON -> ErrorContent(
+            title = "⚙️  Firebase not set up yet",
+            intro = "The app is using a placeholder Firebase config. You need to connect it to a real Firebase project.",
+            steps = listOf(
+                "Go to console.firebase.google.com → Create a project",
+                "Inside the project, click the Android icon → register package: com.watercantracker.app",
+                "Download google-services.json and replace app/google-services.json in your project",
+                "In Firebase Console → Build → Realtime Database → Create Database → choose test mode",
+                "Build → Authentication → Sign-in method → enable Anonymous",
+                "Commit and push to GitHub → GitHub Actions builds a new APK → install it",
+                "Come back here and tap Create Sync Room"
+            ),
+            rulesSnippet = null
         )
 
-        SyncErrorCode.AUTH_TIMEOUT -> Pair(
-            "⏱  Authentication timed out",
-            listOf(
-                Step("1", "Check your internet connection — mobile data or Wi-Fi"),
-                Step("2", "Open Firebase Console → Authentication → Sign-in method"),
-                Step("3", "Make sure", "Anonymous", "sign-in is enabled (toggle ON)"),
-                Step("4", "If it was off, enable it, then tap", "Retry", "below"),
-                Step("5", "If still failing, check that your", "google-services.json", "matches your Firebase project")
-            )
+        SyncErrorCode.DB_TIMEOUT -> ErrorContent(
+            title = "🔒  Database rules are blocking the write",
+            intro = "Auth succeeded but the database write timed out. This almost always means your " +
+                    "Realtime Database security rules are set to deny all access (the default after test mode expires).",
+            steps = listOf(
+                "Open console.firebase.google.com",
+                "Select your project → Build → Realtime Database",
+                "Click the Rules tab at the top",
+                "Replace the rules with the snippet below and click Publish",
+                "Come back here and tap Retry"
+            ),
+            rulesSnippet = """
+{
+  "rules": {
+    "rooms": {
+      "${'$'}roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}""".trimIndent()
         )
 
-        SyncErrorCode.DB_TIMEOUT -> Pair(
-            "⏱  Database timed out",
-            listOf(
-                Step("1", "Check your internet connection"),
-                Step("2", "Open Firebase Console → Build →", "Realtime Database", ""),
-                Step("3", "Make sure the database was", "Created", "(not just clicked)"),
-                Step("4", "Check the Rules tab — set to test mode or add read/write rules"),
-                Step("5", "Tap", "Retry", "below")
-            )
+        SyncErrorCode.AUTH_TIMEOUT -> ErrorContent(
+            title = "⏱  Authentication timed out",
+            intro = "The app could not sign in anonymously to Firebase.",
+            steps = listOf(
+                "Check your internet connection (mobile data or Wi-Fi)",
+                "Open Firebase Console → Build → Authentication → Sign-in method",
+                "Make sure Anonymous is toggled ON",
+                "If it was off, enable it then tap Retry below"
+            ),
+            rulesSnippet = null
         )
 
-        SyncErrorCode.ROOM_NOT_FOUND -> Pair(
-            "🔍  Room not found",
-            listOf(
-                Step("1", "Ask the master device owner to share the Room ID again"),
-                Step("2", "Make sure you copied the", "full Room ID", "without extra spaces"),
-                Step("3", "The Room ID is case-sensitive"),
-                Step("4", "If the master device reset their sync, a new room was created — get the new ID")
-            )
+        SyncErrorCode.ROOM_NOT_FOUND -> ErrorContent(
+            title = "🔍  Room not found",
+            intro = "No sync room exists with that ID.",
+            steps = listOf(
+                "Ask the master device owner to share the Room ID again",
+                "Make sure you copied the full Room ID with no extra spaces",
+                "Room IDs are case-sensitive",
+                "If the master device reset their sync, get the new Room ID"
+            ),
+            rulesSnippet = null
         )
 
-        else -> Pair(
-            "❌  Sync error",
-            listOf(
-                Step("1", "Check your internet connection"),
-                Step("2", "Make sure", "google-services.json", "is your real Firebase file (not the placeholder)"),
-                Step("3", "Verify Anonymous Auth and Realtime Database are both enabled in Firebase Console"),
-                Step("4", "Try tapping", "Retry", "below")
-            )
+        else -> ErrorContent(
+            title = "❌  Sync error",
+            intro = "Something went wrong. Follow the steps below.",
+            steps = listOf(
+                "Check your internet connection",
+                "Make sure google-services.json is your real Firebase file (not the placeholder)",
+                "Firebase Console → Build → Realtime Database → Rules tab → set to allow auth reads/writes",
+                "Firebase Console → Authentication → Anonymous must be enabled",
+                "Tap Retry below"
+            ),
+            rulesSnippet = null
         )
     }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-            // Raw error message in a code-style box
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(intro, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            // Raw error in monospace box
             if (errorMsg.isNotBlank()) {
                 Surface(shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.errorContainer,
                     modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        errorMsg,
+                    Text(errorMsg,
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace, fontSize = 11.sp
-                        ),
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp),
                         color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(10.dp)
-                    )
+                        modifier = Modifier.padding(10.dp))
                 }
             }
 
-            Text("What to do:", style = MaterialTheme.typography.labelLarge,
+            HorizontalDivider()
+            Text("Steps to fix:", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
 
-            steps.forEach { step -> StepRow(step) }
+            steps.forEachIndexed { i, step ->
+                Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+                    Surface(shape = MaterialTheme.shapes.extraSmall,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(22.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("${i + 1}", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(step, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+
+            // Rules snippet
+            rulesSnippet?.let { snippet ->
+                Spacer(Modifier.height(2.dp))
+                Text("Paste these rules in Firebase Console → Realtime Database → Rules:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary)
+                Surface(shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text(snippet,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                        modifier = Modifier.padding(12.dp))
+                }
+            }
 
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -246,53 +296,19 @@ private fun ErrorCard(
                 Button(onClick = onRetry, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Rounded.Sync, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(if (isMaster) "Retry Create" else "Retry Join")
+                    Text(if (isMaster) "Retry" else "Retry Join")
                 }
             }
         }
     }
 }
 
-private data class Step(
-    val num: String,
-    val before: String,
-    val highlight: String = "",
-    val after: String = ""
-) {
-    constructor(num: String, text: String) : this(num, text, "", "")
-}
-
-@Composable
-private fun StepRow(step: Step) {
-    Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
-        Surface(
-            shape = MaterialTheme.shapes.extraSmall,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(20.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(step.num, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            buildAnnotatedString {
-                append(step.before)
-                if (step.highlight.isNotBlank()) {
-                    append(" ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)) {
-                        append(step.highlight)
-                    }
-                }
-                if (step.after.isNotBlank()) append(" ${step.after}")
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
+private data class ErrorContent(
+    val title: String,
+    val intro: String,
+    val steps: List<String>,
+    val rulesSnippet: String?
+)
 
 // ── Setup card ────────────────────────────────────────────────────────────────
 @Composable
@@ -308,18 +324,17 @@ private fun SetupCard(
             Text("This is your master device", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
             Text("All data changes happen here. Other devices receive updates automatically.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = onCreateRoom, enabled = !isCreating && !isJoining,
                 modifier = Modifier.fillMaxWidth()) {
                 if (isCreating) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Creating room…")
+                    Spacer(Modifier.width(8.dp)); Text("Creating room…")
                 } else {
                     Icon(Icons.Rounded.AddCircle, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Create Sync Room")
+                    Spacer(Modifier.width(8.dp)); Text("Create Sync Room")
                 }
             }
 
@@ -328,23 +343,23 @@ private fun SetupCard(
             Text("Join another device's room", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary)
             Text("Scan the QR from the master device — or paste the Room ID below.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(
                 value = joinRoomId, onValueChange = onJoinIdChange,
                 label = { Text("Room ID") }, placeholder = { Text("Paste Room ID here") },
                 singleLine = true, modifier = Modifier.fillMaxWidth()
             )
-            Button(onClick = onJoinRoom, enabled = joinRoomId.isNotBlank() && !isJoining && !isCreating,
+            Button(onClick = onJoinRoom,
+                enabled = joinRoomId.isNotBlank() && !isJoining && !isCreating,
                 modifier = Modifier.fillMaxWidth()) {
                 if (isJoining) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Joining…")
+                    Spacer(Modifier.width(8.dp)); Text("Joining…")
                 } else {
                     Icon(Icons.Rounded.Link, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Join Room")
+                    Spacer(Modifier.width(8.dp)); Text("Join Room")
                 }
             }
         }
@@ -362,12 +377,12 @@ private fun MasterCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Your Sync Room", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Other devices scan this QR or paste the Room ID below",
+            Text("Other devices scan this QR or paste the Room ID",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
 
             if (qrBitmap != null) {
-                Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Sync QR Code",
+                Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Sync QR",
                     modifier = Modifier.size(220.dp)
                         .border(2.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
                         .padding(8.dp))
@@ -402,8 +417,7 @@ private fun MasterCard(
 
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.LinkOff, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Disconnect")
+                Spacer(Modifier.width(6.dp)); Text("Disconnect")
             }
         }
     }
@@ -422,19 +436,20 @@ private fun SecondaryCard(roomId: String, syncState: SyncState, onDisconnect: ()
             }
             Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()) {
-                Text("Room: $roomId", style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                Text("Room: $roomId",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.padding(10.dp))
             }
             syncState.lastSyncAt?.let { ts ->
                 Text("Last sync: ${SimpleDateFormat("d MMM HH:mm:ss", Locale.getDefault()).format(Date(ts))}",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text("Data syncs automatically when the master device makes changes.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.LinkOff, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Leave Room")
+                Spacer(Modifier.width(6.dp)); Text("Leave Room")
             }
         }
     }
@@ -450,10 +465,10 @@ private fun HowItWorksCard() {
             listOf(
                 "🔵  Your device is the master — all data changes originate here",
                 "📱  Other devices scan the QR code or paste the Room ID to join",
-                "☁️   Powered by Firebase Realtime Database (free, always-on)",
-                "📶  Offline-ready — changes sync when back online",
-                "🔒  Room ID is private — only share it with your group",
-                "⚙️   Requires a real google-services.json from Firebase Console"
+                "☁️   Powered by Firebase Realtime Database (free Spark plan)",
+                "📶  Offline-ready — changes sync automatically when back online",
+                "🔒  Room ID is private — only share with your group",
+                "⚙️   Requires google-services.json from your Firebase project"
             ).forEach { line ->
                 Text(line, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
