@@ -80,7 +80,7 @@ fun WaterCanNavGraph(navController: NavHostController, bottomPadding: PaddingVal
         composable(Screen.Settings.route) {
             SettingsScreen(
                 bottomPadding = bottomPadding,
-                onSync        = { navController.navigate(Screen.Sync.route) }
+                onSync        = { navController.navigate(Screen.Sync.createRoute()) }
             )
         }
         composable(Screen.Settlement.route) {
@@ -89,10 +89,22 @@ fun WaterCanNavGraph(navController: NavHostController, bottomPadding: PaddingVal
                 onBack        = { navController.popBackStack() }
             )
         }
-        composable(Screen.Sync.route) {
+        composable(
+            route = Screen.Sync.route,
+            arguments = listOf(
+                navArgument(Screen.Sync.ARG_ROOM_ID) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                    nullable = false
+                }
+            )
+        ) { back ->
+            val roomId = back.arguments?.getString(Screen.Sync.ARG_ROOM_ID)
+                ?.takeIf { it.isNotBlank() }
             SyncScreen(
-                bottomPadding = bottomPadding,
-                onBack        = { navController.popBackStack() }
+                bottomPadding  = bottomPadding,
+                initialRoomId  = roomId,
+                onBack         = { navController.popBackStack() }
             )
         }
     }

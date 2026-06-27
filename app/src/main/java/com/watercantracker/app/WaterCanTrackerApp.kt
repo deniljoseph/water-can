@@ -7,13 +7,23 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
+import com.watercantracker.app.data.repository.SettingsRepository
+import com.watercantracker.app.sync.FirebaseSyncManager
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
 class WaterCanTrackerApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var syncManager: FirebaseSyncManager
+    @Inject lateinit var settingsRepository: SettingsRepository
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -21,14 +31,20 @@ class WaterCanTrackerApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         FirebaseApp.initializeApp(this)
-
-        // Enable offline persistence so writes are queued locally and retried
-        // automatically when the database becomes reachable.
-        // Must be called before any other Firebase Database usage.
         try {
-            FirebaseDatabase.getInstance().setPersistenceEnabled(true)
-        } catch (e: Exception) {
-            // Already initialized — safe to ignore on hot reloads
+            FirebaseDatabase.getInstance(
+                "https://water-can-tracker-a5033-default-rtdb.asia-southeast1.firebasedatabase.app"
+            ).setPersistenceEnabled(true)
+        } catch (_: Exception) {}
+
+        // Start background sync listener as soon as the app process starts.
+        // This means secondary devices receive live updates even without
+        // opening the Sync screen.
+        appScope.launch {
+            val settings = settingsRepository.getSettings()
+            settings.firebaseRoomId?.let { roomId ->
+                syncManager.startListening(roomId, settings.isMasterDevice)
+            }
         }
 
         createNotificationChannels()
@@ -36,20 +52,18 @@ class WaterCanTrackerApp : Application(), Configuration.Provider {
 
     private fun createNotificationChannels() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannels(
-            listOf(
-                NotificationChannel(
-                    CHANNEL_REMINDERS,
-                    getString(R.string.notification_channel_reminders_name),
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply { description = getString(R.string.notification_channel_reminders_desc) },
-                NotificationChannel(
-                    CHANNEL_OVERDUE,
-                    getString(R.string.notification_channel_overdue_name),
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply { description = getString(R.string.notification_channel_overdue_desc) }
-            )
-        )
+        nm.createNotificationChannels(listOf(
+            NotificationChannel(CHANNEL_REMINDERS,
+                getString(R.string.notification_channel_reminders_name),
+                NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = getString(R.string.notification_channel_reminders_desc)
+            },
+            NotificationChannel(CHANNEL_OVERDUE,
+                getString(R.string.notification_channel_overdue_name),
+                NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(R.string.notification_channel_overdue_desc)
+            }
+        ))
     }
 
     companion object {

@@ -68,3 +68,19 @@ class DashboardViewModel @Inject constructor(
         memberRepository.setManualNextPayer(memberId)
     }
 }
+
+    /** Pull-to-refresh: forces a Firebase pull on secondary devices, then calls onDone */
+    fun refresh(onDone: () -> Unit) = viewModelScope.launch {
+        try {
+            val settings = settingsRepository.getSettings()
+            val roomId = settings.firebaseRoomId
+            if (roomId != null) {
+                // Re-attach listener — Firebase will fire onDataChange immediately
+                // with the latest server state
+                syncManager.startListening(roomId, settings.isMasterDevice)
+            }
+        } finally {
+            kotlinx.coroutines.delay(800) // brief delay so spinner shows
+            onDone()
+        }
+    }

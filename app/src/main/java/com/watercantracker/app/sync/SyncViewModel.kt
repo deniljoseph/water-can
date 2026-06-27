@@ -21,8 +21,7 @@ data class SyncUiState(
     val qrBitmap: Bitmap? = null,
     val isCreatingRoom: Boolean = false,
     val isJoiningRoom: Boolean = false,
-    val joinRoomId: String = "",
-    val error: String? = null
+    val joinRoomId: String = ""
 )
 
 @HiltViewModel
@@ -32,10 +31,10 @@ class SyncViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    private val _qrBitmap   = MutableStateFlow<Bitmap?>(null)
-    private val _joinRoomId  = MutableStateFlow("")
-    private val _isCreating  = MutableStateFlow(false)
-    private val _isJoining   = MutableStateFlow(false)
+    private val _qrBitmap  = MutableStateFlow<Bitmap?>(null)
+    private val _joinRoomId = MutableStateFlow("")
+    private val _isCreating = MutableStateFlow(false)
+    private val _isJoining  = MutableStateFlow(false)
 
     val uiState: StateFlow<SyncUiState> = combine(
         syncManager.syncState,
@@ -50,13 +49,14 @@ class SyncViewModel @Inject constructor(
             qrBitmap       = qr,
             isCreatingRoom = _isCreating.value,
             isJoiningRoom  = _isJoining.value,
-            joinRoomId     = joinId,
-            error          = syncState.error
+            joinRoomId     = joinId
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SyncUiState())
 
     init {
-        // Re-attach listener if we already have a room from a previous session
+        // Always re-attach listener on ViewModel init — this runs whenever the
+        // app process starts, not just when the Sync screen is opened.
+        // Secondary devices get live updates in the background automatically.
         viewModelScope.launch {
             val settings = settingsRepository.getSettings()
             val roomId = settings.firebaseRoomId
@@ -75,8 +75,7 @@ class SyncViewModel @Inject constructor(
         try {
             val roomId = syncManager.createRoom()
             _qrBitmap.update { qrHelper.generateRoomQr(roomId) }
-        } catch (e: Exception) {
-            // Error state is already set inside FirebaseSyncManager
+        } catch (_: Exception) {
         } finally {
             _isCreating.update { false }
         }
@@ -93,6 +92,13 @@ class SyncViewModel @Inject constructor(
         } finally {
             _isJoining.update { false }
         }
+    }
+
+    /** Called from SyncScreen when initialRoomId arrives via QR deep link */
+    fun joinIfNotConnected(roomId: String) {
+        if (uiState.value.roomId != null) return  // already in a room
+        _joinRoomId.update { roomId }
+        joinRoom()
     }
 
     fun disconnect() = viewModelScope.launch {

@@ -29,6 +29,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncScreen(
+    initialRoomId: String? = null,
     bottomPadding: PaddingValues,
     onBack: () -> Unit,
     viewModel: SyncViewModel = hiltViewModel()
@@ -36,6 +37,14 @@ fun SyncScreen(
     val state by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboardManager.current
     var showDisconnectDialog by remember { mutableStateOf(false) }
+
+    // Auto-join when opened via QR deep link
+    LaunchedEffect(initialRoomId) {
+        if (!initialRoomId.isNullOrBlank() && state.roomId == null) {
+            viewModel.setJoinRoomId(initialRoomId)
+            viewModel.joinRoom()
+        }
+    }
 
     Scaffold(
         topBar = {
