@@ -36,12 +36,7 @@ data class SyncState(
 )
 
 enum class SyncErrorCode {
-    NONE,
-    PLACEHOLDER_JSON,   // google-services.json is still the placeholder
-    AUTH_TIMEOUT,       // Anonymous auth timed out (no internet or wrong project)
-    DB_TIMEOUT,         // Database read/write timed out
-    ROOM_NOT_FOUND,     // Joined with wrong room ID
-    UNKNOWN
+    NONE, PLACEHOLDER_JSON, AUTH_TIMEOUT, DB_TIMEOUT, ROOM_NOT_FOUND, UNKNOWN
 }
 
 @Singleton
@@ -51,7 +46,9 @@ class FirebaseSyncManager @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val db    = FirebaseDatabase.getInstance("https://water-can-tracker-a5033-default-rtdb.asia-southeast1.firebasedatabase.app")
+    private val db    = FirebaseDatabase.getInstance(
+        "https://water-can-tracker-a5033-default-rtdb.asia-southeast1.firebasedatabase.app"
+    )
     private val auth  = FirebaseAuth.getInstance()
 
     private val _syncState = MutableStateFlow(SyncState())
@@ -63,25 +60,15 @@ class FirebaseSyncManager @Inject constructor(
     // ── Auth ──────────────────────────────────────────────────────────────────
 
     private suspend fun ensureAuthenticated() {
-        // Detect placeholder google-services.json before wasting time on auth
         val projectId = com.google.firebase.FirebaseApp.getInstance().options.projectId ?: ""
-        if (projectId == "YOUR_PROJECT_ID" || projectId.isBlank()) {
-            throw SyncException(
-                SyncErrorCode.PLACEHOLDER_JSON,
-                "Firebase is not configured yet."
-            )
+        if (projectId.isBlank() || projectId == "YOUR_PROJECT_ID") {
+            throw SyncException(SyncErrorCode.PLACEHOLDER_JSON, "Firebase is not configured yet.")
         }
-
         if (auth.currentUser != null) return
         try {
-            withTimeout(30_000L) {
-                auth.signInAnonymously().await()
-            }
+            withTimeout(30_000L) { auth.signInAnonymously().await() }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            throw SyncException(
-                SyncErrorCode.AUTH_TIMEOUT,
-                "Authentication timed out after 30 s."
-            )
+            throw SyncException(SyncErrorCode.AUTH_TIMEOUT, "Authentication timed out after 30 s.")
         } catch (e: Exception) {
             throw SyncException(SyncErrorCode.UNKNOWN, "Auth failed: ${e.message}")
         }
@@ -98,28 +85,21 @@ class FirebaseSyncManager @Inject constructor(
 
             try {
                 withTimeout(30_000L) {
-                    roomRef.child("meta").setValue(
-                        mapOf(
-                            "masterDeviceId" to (auth.currentUser?.uid ?: "unknown"),
-                            "createdAt"      to System.currentTimeMillis()
-                        )
-                    ).await()
+                    roomRef.child("meta").setValue(mapOf(
+                        "masterDeviceId" to (auth.currentUser?.uid ?: "unknown"),
+                        "createdAt"      to System.currentTimeMillis()
+                    )).await()
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database write timed out after 30 s. This almost always means your Realtime Database Rules are blocking the write.")
+                throw SyncException(SyncErrorCode.DB_TIMEOUT,
+                    "Database write timed out after 30 s. Check Realtime Database Rules.")
             }
 
             pushAllToFirebase(roomId)
             settingsRepository.updateFirebaseRoom(roomId, isMaster = true)
             _syncState.update {
-                it.copy(
-                    status     = SyncStatus.SUCCESS,
-                    roomId     = roomId,
-                    isMaster   = true,
-                    lastSyncAt = System.currentTimeMillis(),
-                    error      = null,
-                    errorCode  = SyncErrorCode.NONE
-                )
+                it.copy(status = SyncStatus.SUCCESS, roomId = roomId, isMaster = true,
+                    lastSyncAt = System.currentTimeMillis(), error = null, errorCode = SyncErrorCode.NONE)
             }
             startListening(roomId, isMaster = true)
             roomId
@@ -127,8 +107,7 @@ class FirebaseSyncManager @Inject constructor(
             _syncState.update { it.copy(status = SyncStatus.ERROR, error = e.message, errorCode = e.code) }
             throw e
         } catch (e: Exception) {
-            val msg = "Unexpected error: ${e.message}"
-            _syncState.update { it.copy(status = SyncStatus.ERROR, error = msg, errorCode = SyncErrorCode.UNKNOWN) }
+            _syncState.update { it.copy(status = SyncStatus.ERROR, error = "Unexpected: ${e.message}", errorCode = SyncErrorCode.UNKNOWN) }
             throw e
         }
     }
@@ -138,28 +117,17 @@ class FirebaseSyncManager @Inject constructor(
         try {
             ensureAuthenticated()
             val snapshot = try {
-                withTimeout(30_000L) {
-                    db.reference.child("rooms").child(roomId).get().await()
-                }
+                withTimeout(30_000L) { db.reference.child("rooms").child(roomId).get().await() }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database read/write timed out after 30 s. Check your Firebase Realtime Database Rules.")
+                throw SyncException(SyncErrorCode.DB_TIMEOUT, "Database read timed out after 30 s. Check Realtime Database Rules.")
             }
-
-            if (!snapshot.exists()) {
-                throw SyncException(SyncErrorCode.ROOM_NOT_FOUND, "Room \"$roomId\" not found.")
-            }
+            if (!snapshot.exists()) throw SyncException(SyncErrorCode.ROOM_NOT_FOUND, "Room \"$roomId\" not found.")
 
             pullFromFirebase(snapshot)
             settingsRepository.updateFirebaseRoom(roomId, isMaster = false)
             _syncState.update {
-                it.copy(
-                    status     = SyncStatus.SUCCESS,
-                    roomId     = roomId,
-                    isMaster   = false,
-                    lastSyncAt = System.currentTimeMillis(),
-                    error      = null,
-                    errorCode  = SyncErrorCode.NONE
-                )
+                it.copy(status = SyncStatus.SUCCESS, roomId = roomId, isMaster = false,
+                    lastSyncAt = System.currentTimeMillis(), error = null, errorCode = SyncErrorCode.NONE)
             }
             startListening(roomId, isMaster = false)
         } catch (e: SyncException) {
@@ -169,7 +137,7 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
-    // ── Push helpers ──────────────────────────────────────────────────────────
+    // ── Push helpers (master only) ────────────────────────────────────────────
 
     fun pushPayment(roomId: String, payment: PaymentEntity) {
         if (!_syncState.value.isMaster) return
@@ -201,6 +169,18 @@ class FirebaseSyncManager @Inject constructor(
                 ref.key?.let { key ->
                     if (member.firebaseSyncId == null)
                         memberDao.updateMember(member.copy(firebaseSyncId = key))
+                }
+                touchMeta(roomId)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun deleteMember(roomId: String, firebaseSyncId: String) {
+        if (!_syncState.value.isMaster) return
+        scope.launch {
+            try {
+                withTimeout(30_000L) {
+                    db.reference.child("rooms/$roomId/members/$firebaseSyncId").removeValue().await()
                 }
                 touchMeta(roomId)
             } catch (_: Exception) {}
@@ -245,7 +225,8 @@ class FirebaseSyncManager @Inject constructor(
             }
             override fun onCancelled(error: DatabaseError) {
                 _syncState.update {
-                    it.copy(status = SyncStatus.ERROR, error = "Listener cancelled: ${error.message}", errorCode = SyncErrorCode.UNKNOWN)
+                    it.copy(status = SyncStatus.ERROR, error = "Listener: ${error.message}",
+                        errorCode = SyncErrorCode.UNKNOWN)
                 }
             }
         }
@@ -264,7 +245,7 @@ class FirebaseSyncManager @Inject constructor(
         _syncState.update { SyncState(status = SyncStatus.IDLE) }
     }
 
-    // ── Data helpers ──────────────────────────────────────────────────────────
+    // ── Data sync ─────────────────────────────────────────────────────────────
 
     private suspend fun pushAllToFirebase(roomId: String) {
         memberDao.getAllMembers().forEach { m ->
@@ -283,36 +264,91 @@ class FirebaseSyncManager @Inject constructor(
         }
     }
 
+    /**
+     * Pull members FIRST, build a name→localId map, then pull payments and
+     * resolve paidByMemberId using that map so payments link to the correct
+     * local member on secondary devices.
+     */
     private suspend fun pullFromFirebase(snapshot: DataSnapshot) {
+
+        // ── Step 1: sync members ──────────────────────────────────────────────
         snapshot.child("members").children.forEach { s ->
             val fbKey  = s.key ?: return@forEach
             val name   = s.child("name").getValue(String::class.java) ?: return@forEach
             val phone  = s.child("phoneNumber").getValue(String::class.java)
             val active = s.child("isActive").getValue(Boolean::class.java) ?: true
             val order  = s.child("rotationOrder").getValue(Long::class.java)?.toInt() ?: 0
-            val exists = memberDao.getAllMembers().firstOrNull { it.firebaseSyncId == fbKey }
-            if (exists == null) {
-                memberDao.insertMember(MemberEntity(name = name, phoneNumber = phone,
-                    isActive = active, rotationOrder = order, firebaseSyncId = fbKey))
+
+            val existing = memberDao.getAllMembers().firstOrNull { it.firebaseSyncId == fbKey }
+            if (existing == null) {
+                memberDao.insertMember(
+                    MemberEntity(
+                        name          = name,
+                        phoneNumber   = phone,
+                        isActive      = active,
+                        rotationOrder = order,
+                        firebaseSyncId = fbKey
+                    )
+                )
             } else {
-                memberDao.updateMember(exists.copy(name = name, phoneNumber = phone,
-                    isActive = active, rotationOrder = order))
+                // Update name/phone/active/order but keep local ID and settings
+                memberDao.updateMember(
+                    existing.copy(
+                        name          = name,
+                        phoneNumber   = phone,
+                        isActive      = active,
+                        rotationOrder = order
+                    )
+                )
             }
         }
+
+        // ── Step 2: build fbKey→localId + name→localId lookup maps ───────────
+        // Re-read after insert so newly created members are included
+        val allLocalMembers = memberDao.getAllMembers()
+        val fbKeyToLocalId  = allLocalMembers
+            .filter { it.firebaseSyncId != null }
+            .associate { it.firebaseSyncId!! to it.id }
+        val nameToLocalId   = allLocalMembers.associate { it.name to it.id }
+
+        // ── Step 3: sync payments ─────────────────────────────────────────────
         snapshot.child("payments").children.forEach { s ->
-            val fbKey  = s.key ?: return@forEach
-            val qty    = s.child("quantity").getValue(Long::class.java)?.toInt() ?: return@forEach
-            val amount = s.child("amount").getValue(Double::class.java) ?: return@forEach
-            val payer  = s.child("paidByNameSnapshot").getValue(String::class.java) ?: ""
-            val date   = s.child("purchaseDate").getValue(Long::class.java) ?: return@forEach
-            val notes  = s.child("notes").getValue(String::class.java)
-            val vendor = s.child("vendorName").getValue(String::class.java)
-            val joint  = s.child("isJointPayment").getValue(Boolean::class.java) ?: false
-            val exists = paymentDao.observeAllPayments().first().firstOrNull { it.firebaseSyncId == fbKey }
-            if (exists == null) {
-                paymentDao.insertPayment(PaymentEntity(quantity = qty, amount = amount,
-                    paidByMemberId = null, paidByNameSnapshot = payer, purchaseDate = date,
-                    notes = notes, vendorName = vendor, isJointPayment = joint, firebaseSyncId = fbKey))
+            val fbKey     = s.key ?: return@forEach
+            val qty       = s.child("quantity").getValue(Long::class.java)?.toInt() ?: return@forEach
+            val amount    = s.child("amount").getValue(Double::class.java) ?: return@forEach
+            val payerName = s.child("paidByNameSnapshot").getValue(String::class.java) ?: ""
+            val date      = s.child("purchaseDate").getValue(Long::class.java) ?: return@forEach
+            val notes     = s.child("notes").getValue(String::class.java)
+            val vendor    = s.child("vendorName").getValue(String::class.java)
+            val joint     = s.child("isJointPayment").getValue(Boolean::class.java) ?: false
+            // masterMemberId is the original local ID on the master device — we use
+            // it to look up by Firebase sync key first, then fall back to name match
+            val masterFbMemberKey = s.child("payerFbKey").getValue(String::class.java)
+
+            // Resolve to this device's local member ID
+            val localMemberId = masterFbMemberKey?.let { fbKeyToLocalId[it] }
+                ?: nameToLocalId[payerName]
+
+            val existing = paymentDao.observeAllPayments().first()
+                .firstOrNull { it.firebaseSyncId == fbKey }
+
+            if (existing == null) {
+                paymentDao.insertPayment(
+                    PaymentEntity(
+                        quantity           = qty,
+                        amount             = amount,
+                        paidByMemberId     = localMemberId,   // ← now resolved!
+                        paidByNameSnapshot = payerName,
+                        purchaseDate       = date,
+                        notes              = notes,
+                        vendorName         = vendor,
+                        isJointPayment     = joint,
+                        firebaseSyncId     = fbKey
+                    )
+                )
+            } else if (existing.paidByMemberId == null && localMemberId != null) {
+                // Fix previously synced payments that had null memberId
+                paymentDao.updatePayment(existing.copy(paidByMemberId = localMemberId))
             }
         }
     }
@@ -322,16 +358,40 @@ class FirebaseSyncManager @Inject constructor(
     }
 
     private fun memberToMap(m: MemberEntity): Map<String, Any?> = mapOf(
-        "name" to m.name, "phoneNumber" to m.phoneNumber,
-        "isActive" to m.isActive, "rotationOrder" to m.rotationOrder, "createdAt" to m.createdAt
+        "name"          to m.name,
+        "phoneNumber"   to m.phoneNumber,
+        "isActive"      to m.isActive,
+        "rotationOrder" to m.rotationOrder,
+        "createdAt"     to m.createdAt
+        // Note: we do NOT push localId — each device has its own Room auto-IDs.
+        // We match by firebaseSyncId (the Firebase push key) and name as fallback.
     )
 
-    private fun paymentToMap(p: PaymentEntity): Map<String, Any?> = mapOf(
-        "quantity" to p.quantity, "amount" to p.amount,
-        "paidByNameSnapshot" to p.paidByNameSnapshot, "purchaseDate" to p.purchaseDate,
-        "notes" to p.notes, "vendorName" to p.vendorName,
-        "isJointPayment" to p.isJointPayment, "createdAt" to p.createdAt
-    )
+    private fun paymentToMap(p: PaymentEntity): Map<String, Any?> {
+        // Also push the payer's Firebase member key so secondary devices can
+        // resolve paidByMemberId even if the member name isn't unique
+        val payerFbKey = p.paidByMemberId?.let { memberId ->
+            // This is a best-effort lookup — fire and forget
+            var fbKey: String? = null
+            try {
+                kotlinx.coroutines.runBlocking {
+                    fbKey = memberDao.getMemberById(memberId)?.firebaseSyncId
+                }
+            } catch (_: Exception) {}
+            fbKey
+        }
+        return mapOf(
+            "quantity"           to p.quantity,
+            "amount"             to p.amount,
+            "paidByNameSnapshot" to p.paidByNameSnapshot,
+            "payerFbKey"         to payerFbKey,
+            "purchaseDate"       to p.purchaseDate,
+            "notes"              to p.notes,
+            "vendorName"         to p.vendorName,
+            "isJointPayment"     to p.isJointPayment,
+            "createdAt"          to p.createdAt
+        )
+    }
 }
 
 class SyncException(val code: SyncErrorCode, message: String) : Exception(message)

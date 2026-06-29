@@ -9,13 +9,11 @@ import com.watercantracker.app.data.repository.PaymentRepository
 import com.watercantracker.app.data.repository.SettingsRepository
 import com.watercantracker.app.domain.model.MemberBalance
 import com.watercantracker.app.domain.model.MemberStats
+import com.watercantracker.app.sync.FirebaseSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,10 +33,10 @@ data class MembersUiState(
 class MembersViewModel @Inject constructor(
     private val memberRepository: MemberRepository,
     private val paymentRepository: PaymentRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val syncManager: FirebaseSyncManager
 ) : ViewModel() {
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<MembersUiState> = combine(
         memberRepository.observeAllMembers(),
         paymentRepository.observeMemberStats(),
@@ -47,8 +45,6 @@ class MembersViewModel @Inject constructor(
     ) { members, stats, totalSpend, settings ->
         val activeMembers = members.filter { it.isActive }
         val avg = if (stats.isNotEmpty()) stats.sumOf { it.totalAmountContributed } / stats.size else 0.0
-
-        // Compute balances inline — fair share = totalSpend / activeMembers
         val fairShare = if (activeMembers.isNotEmpty()) totalSpend / activeMembers.size else 0.0
         val balances = activeMembers.map { member ->
             val paid = stats.firstOrNull { it.memberId == member.id }?.totalAmountContributed ?: 0.0
@@ -64,24 +60,60 @@ class MembersViewModel @Inject constructor(
         }.sortedBy { it.netBalance }
 
         MembersUiState(
-            members                 = members,
-            memberStats             = stats,
-            memberBalances          = balances,
-            settings                = settings,
+            members                  = members,
+            memberStats              = stats,
+            memberBalances           = balances,
+            settings                 = settings,
             groupAverageContribution = avg,
-            totalGroupSpend         = totalSpend,
-            isLoading               = false
+            totalGroupSpend          = totalSpend,
+            isLoading                = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MembersUiState())
 
     fun addMember(name: String, phone: String?, avatarUri: String?) = viewModelScope.launch {
-        memberRepository.addMember(name, phone, avatarUri)
+        val id = memberRepository.addMember(name, phone, avatarUri)
+        // Push new member to Firebase so other devices see it immediately
+        val settings = settingsRepository.getSettings()
+        settings.firebaseRoomId?.let { roomId ->
+            val member = memberRepository.getMemberById(id)
+            member?.let { syncManager.pushMember(roomId, it) }
+        }
     }
-    fun updateMember(member: MemberEntity) = viewModelScope.launch { memberRepository.updateMember(member) }
-    fun deleteMember(member: MemberEntity) = viewModelScope.launch { memberRepository.deleteMember(member) }
-    fun setActiveStatus(memberId: Long, isActive: Boolean) = viewModelScope.launch { memberRepository.setActiveStatus(memberId, isActive) }
-    fun setManualNextPayer(memberId: Long) = viewModelScope.launch { memberRepository.setManualNextPayer(memberId) }
+
+    fun updateMember(member: MemberEntity) = viewModelScope.launch {
+        memberRepository.updateMember(member)
+        val settings = settingsRepository.getSettings()
+        settings.firebaseRoomId?.let { roomId ->
+            syncManager.pushMember(roomId, member)
+        }
+    }
+
+    fun deleteMember(member: MemberEntity) = viewModelScope.launch {
+        memberRepository.deleteMember(member)
+        val settings = settingsRepository.getSettings()
+        settings.firebaseRoomId?.let { roomId ->
+            member.firebaseSyncId?.let { fbId ->
+                syncManager.deleteMember(roomId, fbId)
+            }
+        }
+    }
+
+    fun setActiveStatus(memberId: Long, isActive: Boolean) = viewModelScope.launch {
+        memberRepository.setActiveStatus(memberId, isActive)
+        // Push updated member state to Firebase
+        val settings = settingsRepository.getSettings()
+        settings.firebaseRoomId?.let { roomId ->
+            memberRepository.getMemberById(memberId)?.let { member ->
+                syncManager.pushMember(roomId, member)
+            }
+        }
+    }
+
+    fun setManualNextPayer(memberId: Long) = viewModelScope.launch {
+        memberRepository.setManualNextPayer(memberId)
+    }
+
     fun skipMember(memberId: Long) = viewModelScope.launch { memberRepository.skipMember(memberId) }
-    fun moveUp(memberId: Long) = viewModelScope.launch { memberRepository.moveUp(memberId) }
-    fun moveDown(memberId: Long) = viewModelScope.launch { memberRepository.moveDown(memberId) }
+    fun moveUp(memberId: Long)     = viewModelScope.launch { memberRepository.moveUp(memberId) }
+    fun moveDown(memberId: Long)   = viewModelScope.launch { memberRepository.moveDown(memberId) }
 }
