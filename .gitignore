@@ -1,3 +1,15 @@
-# Signing keystore — injected via GitHub Actions secret, never commit
-app/watercan-release.jks
-app/watercan-release.jks.b64
+# Build outputs
+/build
+/app/build
+
+# Local properties (contains SDK path - machine specific)
+local.properties
+
+# IDE files
+.idea/
+*.iml
+.gradle/
+
+# API keys / production secrets (never commit these)
+# Note: watercan-release.jks is a DEBUG keystore — safe to commit for consistent signing
+# DO NOT add app/watercan-release.jks here

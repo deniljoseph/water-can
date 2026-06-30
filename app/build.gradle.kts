@@ -20,34 +20,27 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
-    // Consistent signing for both debug and release so incremental installs work
-    // across machines (GitHub Actions, your PC, etc.)
-    // The keystore file is injected by GitHub Actions via environment variables.
-    // For local builds, place watercan-release.jks in the app/ folder.
+    // Single consistent signing config used for ALL build types.
+    // watercan-release.jks is committed to the repo (it's a debug keystore, not secret).
+    // This guarantees the same APK signature on every machine and every CI build
+    // so "install over existing" always works without uninstalling first.
     signingConfigs {
         create("consistent") {
-            val keystoreFile = file("watercan-release.jks")
-            if (keystoreFile.exists()) {
-                storeFile = keystoreFile
-                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "watercan123"
-                keyAlias = System.getenv("KEY_ALIAS") ?: "watercan"
-                keyPassword = System.getenv("KEY_PASSWORD") ?: "watercan123"
-            }
+            storeFile     = file("watercan-release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "watercan123"
+            keyAlias      = System.getenv("KEY_ALIAS")         ?: "watercan"
+            keyPassword   = System.getenv("KEY_PASSWORD")      ?: "watercan123"
         }
     }
 
     buildTypes {
         debug {
-            isMinifyEnabled = false
+            isMinifyEnabled  = false
             versionNameSuffix = "-debug"
-            // Use the consistent signing config instead of the auto-generated debug keystore
-            signingConfig = if (file("watercan-release.jks").exists())
-                signingConfigs.getByName("consistent")
-            else
-                signingConfigs.getByName("debug")
+            signingConfig    = signingConfigs.getByName("consistent")
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled  = true
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

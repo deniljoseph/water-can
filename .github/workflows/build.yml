@@ -29,7 +29,6 @@ jobs:
           /tmp/gradle-dist/gradle-8.7/bin/gradle wrapper --gradle-version=8.7
           chmod +x gradlew
 
-      # Inject google-services.json from GitHub secret
       - name: Write google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -38,29 +37,16 @@ jobs:
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
             echo "✅ google-services.json written from secret"
           else
-            echo "⚠️  No GOOGLE_SERVICES_JSON secret found, using placeholder"
-          fi
-
-      # Inject consistent signing keystore from GitHub secret
-      # This ensures every build is signed with the same key → incremental installs work
-      - name: Write signing keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > app/watercan-release.jks
-            echo "✅ Keystore written from secret"
-          else
-            echo "⚠️  No KEYSTORE_BASE64 secret found"
-            echo "   Builds will use the auto-generated debug keystore (not consistent)"
+            echo "⚠️  Using placeholder google-services.json (Firebase sync won't work until configured)"
           fi
 
       - name: Build debug APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify signing certificate
+        run: |
+          echo "APK signing info:"
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk 2>/dev/null | grep -E "Owner|SHA|Valid" || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
