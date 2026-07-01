@@ -10,6 +10,7 @@ import com.watercantracker.app.domain.model.MemberStats
 import com.watercantracker.app.domain.model.MonthlySpendingSummary
 import com.watercantracker.app.domain.model.PriceTrendPoint
 import com.watercantracker.app.data.export.ExportManager
+import com.watercantracker.app.data.local.entity.MemberEntity
 import com.watercantracker.app.data.local.entity.PaymentEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +36,7 @@ data class MemberPaymentShare(
     val paymentCount: Int,
     val canCount: Int,
     val fairShare: Double,
-    val balance: Double   // positive = credit, negative = owes
+    val balance: Double
 )
 
 data class ReportsUiState(
@@ -44,7 +45,6 @@ data class ReportsUiState(
     val priceTrend: List<PriceTrendPoint> = emptyList(),
     val groupAverage: Double = 0.0,
     val currencySymbol: String = "AED",
-    // Monthly drill-down
     val selectedMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
     val selectedYear: Int  = Calendar.getInstance().get(Calendar.YEAR),
     val monthlyReportData: MonthlyReportData? = null,
@@ -62,31 +62,40 @@ class ReportsViewModel @Inject constructor(
     private val exportManager: ExportManager
 ) : ViewModel() {
 
-    private val _selectedMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1)
-    private val _selectedYear  = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
-    private val _exportResult  = MutableStateFlow<String?>(null)
+    private val _selectedMonth    = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH) + 1)
+    private val _selectedYear     = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
+    private val _exportResult     = MutableStateFlow<String?>(null)
     private val _exportInProgress = MutableStateFlow(false)
 
     val uiState: StateFlow<ReportsUiState> = combine(
         paymentRepository.observeAllMonthlySummaries(),
         paymentRepository.observeMemberStats(),
         paymentRepository.observeAllPayments(),
-        settingsRepository.observeSettings()
-    ) { summaries, stats, allPayments, settings ->
-        val avg = if (stats.isNotEmpty()) stats.sumOf { it.totalAmountContributed } / stats.size else 0.0
-        val month = _selectedMonth.value
-        val year  = _selectedYear.value
+        memberRepository.observeActiveMembers(),
+        settingsRepository.observeSettings(),
+        _selectedMonth,
+        _selectedYear
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val summaries      = values[0] as List<MonthlySpendingSummary>
+        @Suppress("UNCHECKED_CAST")
+        val stats          = values[1] as List<MemberStats>
+        @Suppress("UNCHECKED_CAST")
+        val allPayments    = values[2] as List<PaymentEntity>
+        @Suppress("UNCHECKED_CAST")
+        val activeMembers  = values[3] as List<MemberEntity>
+        val settings       = values[4] as com.watercantracker.app.data.local.entity.SettingsEntity
+        val month          = values[5] as Int
+        val year           = values[6] as Int
 
-        // Build monthly drill-down for selected month
+        val avg = if (stats.isNotEmpty()) stats.sumOf { it.totalAmountContributed } / stats.size else 0.0
+
         val monthPayments = allPayments.filter { p ->
             val cal = Calendar.getInstance().apply { timeInMillis = p.purchaseDate }
             cal.get(Calendar.MONTH) + 1 == month && cal.get(Calendar.YEAR) == year
         }
         val monthTotal = monthPayments.sumOf { it.amount }
-        val activeMembers = memberRepository.observeActiveMembers().let {
-            try { kotlinx.coroutines.flow.first(it) } catch (_: Exception) { emptyList() }
-        }
-        val fairShare = if (activeMembers.isNotEmpty()) monthTotal / activeMembers.size else 0.0
+        val fairShare  = if (activeMembers.isNotEmpty()) monthTotal / activeMembers.size else 0.0
 
         val memberBreakdown = activeMembers.map { member ->
             val memberPayments = monthPayments.filter { it.paidByMemberId == member.id }
@@ -102,11 +111,12 @@ class ReportsViewModel @Inject constructor(
             )
         }.sortedByDescending { it.totalPaid }
 
-        val monthSummary = summaries.firstOrNull { it.yearMonth == "$year-${String.format("%02d", month)}" }
+        val monthKey = "$year-${String.format("%02d", month)}"
+        val monthSummary = summaries.firstOrNull { it.yearMonth == monthKey }
         val reportData = if (monthPayments.isNotEmpty() || monthSummary != null) {
             MonthlyReportData(
-                summary         = monthSummary ?: MonthlySpendingSummary(
-                    yearMonth    = "$year-${String.format("%02d", month)}",
+                summary = monthSummary ?: MonthlySpendingSummary(
+                    yearMonth    = monthKey,
                     totalCans    = monthPayments.sumOf { it.quantity },
                     totalAmount  = monthTotal,
                     paymentCount = monthPayments.size
