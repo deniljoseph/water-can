@@ -1,4 +1,4 @@
-name: Build Release APK
+name: Build Debug APK
 
 on:
   push:
@@ -37,15 +37,20 @@ jobs:
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
             echo "✅ google-services.json written from secret"
           else
-            echo "⚠️  Using placeholder google-services.json"
+            echo "⚠️  Using placeholder google-services.json (Firebase sync won't work until configured)"
           fi
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload release APK
+      - name: Verify signing certificate
+        run: |
+          echo "APK signing info:"
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk 2>/dev/null | grep -E "Owner|SHA|Valid" || true
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: water-can-tracker-release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: water-can-tracker-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
