@@ -74,6 +74,8 @@ class PaymentsViewModel @Inject constructor(
             purchaseDate, notes, vendorName, receiptImageUri
         )
         memberRepository.clearManualNextPayer()
+        // Advance rotation ONLY if the correct person paid; out-of-turn payments leave queue intact
+        memberRepository.advanceRotationIfNeeded(paidByMember.id)
 
         // Push to Firebase if sync is active
         val settings = settingsRepository.getSettings()
