@@ -34,3 +34,5 @@ class SettingsRepository @Inject constructor(private val settingsDao: SettingsDa
     suspend fun clearFirebaseRoom() = update { copy(firebaseRoomId = null, isMasterDevice = true, lastSyncAt = null) }
     suspend fun updateLastSync()    = update { copy(lastSyncAt = System.currentTimeMillis()) }
 }
+
+    suspend fun updateCansPerTurn(count: Int) = update { copy(cansPerTurn = count.coerceAtLeast(1)) }

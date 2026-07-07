@@ -34,6 +34,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showMonthlyResetDialog by remember { mutableStateOf(false) }
+
     var priceText by remember(state.settings.defaultPricePerCan) {
         mutableStateOf(
             if (state.settings.defaultPricePerCan > 0)
@@ -45,16 +46,20 @@ fun SettingsScreen(
         topBar = { TopAppBar(title = { Text("Settings", fontWeight = FontWeight.Bold) }) }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).fillMaxSize()
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
 
             // ── Water Can Price ───────────────────────────────────────────────
             SettingsSection("Water Can Price") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text("Set the price per can. The app auto-fills payment amounts and calculates partial shortfalls.",
+                    Text(
+                        "Set the price per can. The app will auto-fill amounts and detect partial payments.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = priceText,
@@ -66,20 +71,89 @@ fun SettingsScreen(
                             if (priceText.isNotEmpty()) {
                                 IconButton(onClick = {
                                     viewModel.setDefaultPrice(priceText.toDoubleOrNull() ?: 0.0)
-                                }) { Icon(Icons.Rounded.Check, "Save", tint = MaterialTheme.colorScheme.primary) }
+                                }) {
+                                    Icon(Icons.Rounded.Check, "Save", tint = MaterialTheme.colorScheme.primary)
+                                }
                             }
                         },
-                        supportingText = { Text(if (state.settings.defaultPricePerCan > 0)
-                            "Current: ${state.settings.currencySymbol} ${String.format("%.2f", state.settings.defaultPricePerCan)} · Tap ✓ to save"
-                            else "Not set · enter price and tap ✓") },
+                        supportingText = {
+                            Text(
+                                if (state.settings.defaultPricePerCan > 0)
+                                    "Current: ${state.settings.currencySymbol} ${String.format("%.2f", state.settings.defaultPricePerCan)} · tap ✓ to save"
+                                else "Not set · enter price and tap ✓"
+                            )
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (state.settings.defaultPricePerCan > 0) {
                         Spacer(Modifier.height(6.dp))
-                        OutlinedButton(onClick = { priceText = ""; viewModel.setDefaultPrice(0.0) },
-                            modifier = Modifier.fillMaxWidth()) { Text("Clear price") }
+                        OutlinedButton(
+                            onClick = { priceText = ""; viewModel.setDefaultPrice(0.0) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Clear price") }
                     }
+                }
+            }
+
+            HorizontalDivider()
+
+            // ── Cans Per Turn ─────────────────────────────────────────────────
+            SettingsSection("Rotation Quota") {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        "How many cans must each person buy before the rotation moves to the next person. " +
+                                "They can buy them across multiple days — the rotation won't advance until the quota is met.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Cans per turn:", style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium)
+                        // Stepper: –  [n]  +
+                        IconButton(
+                            onClick = {
+                                val current = state.settings.cansPerTurn
+                                if (current > 1) viewModel.setCansPerTurn(current - 1)
+                            },
+                            enabled = state.settings.cansPerTurn > 1
+                        ) {
+                            Icon(Icons.Rounded.Remove, "Decrease")
+                        }
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    "${state.settings.cansPerTurn}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            viewModel.setCansPerTurn(state.settings.cansPerTurn + 1)
+                        }) {
+                            Icon(Icons.Rounded.Add, "Increase")
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        when (state.settings.cansPerTurn) {
+                            1    -> "Each person buys 1 can per turn — rotation advances immediately after each payment."
+                            else -> "Each person must buy ${state.settings.cansPerTurn} cans before the next person's turn. " +
+                                    "Partial purchases count — they can buy 1 can now and the rest later."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
@@ -87,7 +161,6 @@ fun SettingsScreen(
 
             // ── Appearance ────────────────────────────────────────────────────
             SettingsSection("Appearance") {
-                // Theme mode
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text("Theme", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -100,29 +173,20 @@ fun SettingsScreen(
                                     label = { Text(label) })
                             }
                     }
-
-                    // Dark mode variant (only when dark)
                     if (state.themeMode != AppThemeMode.LIGHT) {
                         Spacer(Modifier.height(12.dp))
                         Text("Dark mode style", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(
-                                DarkModeVariant.DARK     to "Dark",
-                                DarkModeVariant.AMOLED   to "AMOLED",
-                                DarkModeVariant.DARK_GRAY to "Gray"
-                            ).forEach { (variant, label) ->
-                                FilterChip(
-                                    selected = state.darkModeVariant == variant,
-                                    onClick  = { viewModel.updateDarkVariant(variant) },
-                                    label    = { Text(label) }
-                                )
+                            listOf(DarkModeVariant.DARK to "Dark", DarkModeVariant.AMOLED to "AMOLED",
+                                DarkModeVariant.DARK_GRAY to "Gray").forEach { (v, label) ->
+                                FilterChip(selected = state.darkModeVariant == v,
+                                    onClick = { viewModel.updateDarkVariant(v) },
+                                    label = { Text(label) })
                             }
                         }
                     }
-
-                    // Accent color
                     Spacer(Modifier.height(12.dp))
                     Text("Accent color", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -135,10 +199,7 @@ fun SettingsScreen(
                                     .size(36.dp)
                                     .clip(CircleShape)
                                     .background(accent.primary)
-                                    .then(
-                                        if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                        else Modifier
-                                    )
+                                    .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
                                     .clickable { viewModel.updateAccentColor(accent) },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -165,9 +226,12 @@ fun SettingsScreen(
 
             // ── Sync ──────────────────────────────────────────────────────────
             SettingsSection("Live Sync") {
-                ClickRow("Real-time sync & QR invite",
-                    if (state.settings.firebaseRoomId != null) "Connected to room" else "Not configured",
-                    Icons.Rounded.Sync, onSync)
+                ClickRow(
+                    "Real-time sync & QR invite",
+                    if (state.settings.firebaseRoomId != null) "Connected · Room: ${state.settings.firebaseRoomId?.take(12)}…"
+                    else "Not configured",
+                    Icons.Rounded.Sync, onSync
+                )
             }
 
             HorizontalDivider()
@@ -182,7 +246,29 @@ fun SettingsScreen(
 
             // ── About ─────────────────────────────────────────────────────────
             SettingsSection("About") {
-                AboutCard()
+                ElevatedCard(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.WaterDrop, null,
+                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text("Water Can Tracker", fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium)
+                                Text("Version 1.3.0", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Made by Denil Joseph", style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        Text("Built with Kotlin · Jetpack Compose · Material 3 · Room · Firebase",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
 
             Spacer(Modifier.height(bottomPadding.calculateBottomPadding() + 32.dp))
@@ -192,41 +278,13 @@ fun SettingsScreen(
     if (showMonthlyResetDialog) {
         AlertDialog(
             onDismissRequest = { showMonthlyResetDialog = false },
-            title   = { Text("Monthly reset") },
-            text    = { Text("Historical data is preserved. The monthly summary will start fresh from today.") },
+            title = { Text("Monthly reset") },
+            text  = { Text("Historical data is preserved. The monthly summary will start fresh from today.") },
             confirmButton = {
                 Button(onClick = { viewModel.recordMonthlyReset(); showMonthlyResetDialog = false }) { Text("Reset") }
             },
             dismissButton = { TextButton(onClick = { showMonthlyResetDialog = false }) { Text("Cancel") } }
         )
-    }
-}
-
-@Composable
-private fun AboutCard() {
-    ElevatedCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.WaterDrop, null,
-                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text("Water Can Tracker", fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium)
-                    Text("Version 1.3.0", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text("Made by Denil Joseph", style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-            Text("Built with Kotlin · Jetpack Compose · Material 3 · Room · Firebase",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Tracks shared water can expenses, manages payment rotation, calculates monthly settlements, and syncs across devices in real time.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
     }
 }
 
@@ -246,21 +304,29 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onCheck
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
 @Composable
-private fun ClickRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun ClickRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
     Surface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

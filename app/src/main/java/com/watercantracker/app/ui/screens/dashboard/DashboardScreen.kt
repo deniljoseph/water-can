@@ -42,8 +42,6 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val df = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
-
-    // Pull-to-refresh using TopAppBar scroll behaviour (compatible with M3 1.2.1)
     var isRefreshing by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -64,31 +62,22 @@ fun DashboardScreen(
                     if (state.syncState.status == SyncStatus.SUCCESS) {
                         Icon(Icons.Rounded.CloudDone, "Synced",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(end = 4.dp)
-                                .size(20.dp))
+                            modifier = Modifier.padding(end = 4.dp).size(20.dp))
                     }
-                    // Pull-to-refresh button as a manual trigger too
-                    IconButton(
-                        onClick = {
-                            if (!isRefreshing) {
-                                isRefreshing = true
-                                viewModel.refresh { isRefreshing = false }
-                            }
+                    IconButton(onClick = {
+                        if (!isRefreshing) {
+                            isRefreshing = true
+                            viewModel.refresh { isRefreshing = false }
                         }
-                    ) {
-                        if (isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
+                    }) {
+                        if (isRefreshing)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else
                             Icon(Icons.Rounded.Refresh, "Refresh",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
                     IconButton(onClick = onSettlement) {
-                        Icon(Icons.Rounded.Calculate, "Monthly Settlement",
+                        Icon(Icons.Rounded.Calculate, "Settlement",
                             tint = MaterialTheme.colorScheme.primary)
                     }
                 },
@@ -129,6 +118,7 @@ fun DashboardScreen(
                         color = Color.White.copy(alpha = 0.75f),
                         letterSpacing = 2.sp)
                     Spacer(Modifier.height(12.dp))
+
                     if (nextMember != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             MemberAvatar(name = nextMember.name,
@@ -143,7 +133,43 @@ fun DashboardScreen(
                                     color = Color.White.copy(alpha = 0.7f))
                             }
                         }
-                        Spacer(Modifier.height(16.dp))
+
+                        // ── Can quota progress ────────────────────────────────
+                        if (state.cansPerTurn > 1) {
+                            Spacer(Modifier.height(12.dp))
+                            val paid  = state.cansPaidThisTurn
+                            val total = state.cansPerTurn
+                            val remaining = total - paid
+
+                            Column {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Can quota: $paid / $total bought",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.85f))
+                                    Text("$remaining more to go",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AmberAccent)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { if (total > 0) paid.toFloat() / total else 0f },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = AmberAccent,
+                                    trackColor = Color.White.copy(alpha = 0.25f)
+                                )
+                            }
+                        } else if (state.cansPerTurn == 1) {
+                            // Single can per turn — show simple "needs to pay 1 can"
+                            Text("Needs to buy 1 can",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f))
+                        }
+
+                        Spacer(Modifier.height(14.dp))
                         OutlinedButton(
                             onClick = onAddPayment,
                             border = ButtonDefaults.outlinedButtonBorder.copy(
@@ -267,18 +293,12 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Spacer for FAB ────────────────────────────────────────────────
             Spacer(Modifier.height(72.dp))
-
-            // ── Made by footer ────────────────────────────────────────────────
-            Text(
-                "Made by Denil Joseph",
+            Text("Made by Denil Joseph",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+                modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(bottomPadding.calculateBottomPadding() + 16.dp))
         }
     }

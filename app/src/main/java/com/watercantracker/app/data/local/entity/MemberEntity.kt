@@ -15,6 +15,7 @@ data class MemberEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val isManualNextPayer: Boolean = false,
     val isSkipped: Boolean = false,
-    /** Firebase Realtime DB key — null until synced */
-    val firebaseSyncId: String? = null
+    val firebaseSyncId: String? = null,
+    /** Running total of cans bought in the current turn (resets when quota met). */
+    val cansPaidThisTurn: Int = 0
 )

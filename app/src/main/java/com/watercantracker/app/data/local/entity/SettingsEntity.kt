@@ -19,5 +19,7 @@ data class SettingsEntity(
     val currencySymbol: String = "AED",
     val firebaseRoomId: String? = null,
     val isMasterDevice: Boolean = true,
-    val lastSyncAt: Long? = null
+    val lastSyncAt: Long? = null,
+    /** How many cans each member must buy before the rotation advances. Default 1. */
+    val cansPerTurn: Int = 1
 )

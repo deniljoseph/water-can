@@ -18,6 +18,8 @@ import com.watercantracker.app.data.local.entity.SettlementEntity
 import com.watercantracker.app.data.local.entity.SettingsEntity
 import com.watercantracker.app.data.local.migration.MIGRATION_1_2
 import com.watercantracker.app.data.local.migration.MIGRATION_2_3
+import com.watercantracker.app.data.local.migration.MIGRATION_3_4
+import com.watercantracker.app.data.local.migration.MIGRATION_4_5
 
 @Database(
     entities = [
@@ -28,7 +30,7 @@ import com.watercantracker.app.data.local.migration.MIGRATION_2_3
         SettlementEntity::class,
         JointPaymentContributorEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 abstract class WaterCanDatabase : RoomDatabase() {
@@ -49,7 +51,7 @@ abstract class WaterCanDatabase : RoomDatabase() {
                     WaterCanDatabase::class.java,
                     "water_can_tracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }

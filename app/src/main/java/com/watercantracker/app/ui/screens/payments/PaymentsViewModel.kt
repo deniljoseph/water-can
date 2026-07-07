@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -66,22 +65,33 @@ class PaymentsViewModel @Inject constructor(
     fun updateFilter(filter: PaymentsFilter) { _filter.update { filter } }
 
     fun addPayment(
-        quantity: Int, amount: Double, paidByMember: MemberEntity,
-        purchaseDate: Long, notes: String?, vendorName: String?, receiptImageUri: String?
+        quantity: Int,
+        amount: Double,
+        paidByMember: MemberEntity,
+        purchaseDate: Long,
+        notes: String?,
+        vendorName: String?,
+        receiptImageUri: String?
     ) = viewModelScope.launch {
         val id = paymentRepository.addPayment(
             quantity, amount, paidByMember.id, paidByMember.name,
             purchaseDate, notes, vendorName, receiptImageUri
         )
         memberRepository.clearManualNextPayer()
-        // Advance rotation ONLY if the correct person paid; out-of-turn payments leave queue intact
-        memberRepository.advanceRotationIfNeeded(paidByMember.id)
 
-        // Push to Firebase if sync is active
+        // Advance rotation only if correct person paid their full (or partial) quota
         val settings = settingsRepository.getSettings()
+        memberRepository.advanceRotationIfNeeded(
+            payerMemberId = paidByMember.id,
+            cansJustPaid  = quantity,
+            cansPerTurn   = settings.cansPerTurn
+        )
+
+        // Push to Firebase
         settings.firebaseRoomId?.let { roomId ->
-            val payment = paymentRepository.getPaymentById(id)
-            payment?.let { syncManager.pushPayment(roomId, it) }
+            paymentRepository.getPaymentById(id)?.let { payment ->
+                syncManager.pushPayment(roomId, payment)
+            }
         }
     }
 
@@ -97,9 +107,7 @@ class PaymentsViewModel @Inject constructor(
         paymentRepository.deletePayment(payment)
         val settings = settingsRepository.getSettings()
         settings.firebaseRoomId?.let { roomId ->
-            payment.firebaseSyncId?.let { fbId ->
-                syncManager.deletePayment(roomId, fbId)
-            }
+            payment.firebaseSyncId?.let { syncManager.deletePayment(roomId, it) }
         }
     }
 }

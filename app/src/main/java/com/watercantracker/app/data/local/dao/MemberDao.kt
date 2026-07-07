@@ -66,3 +66,6 @@ interface MemberDao {
     @Query("UPDATE members SET isActive = :isActive WHERE id = :memberId")
     suspend fun setActiveStatus(memberId: Long, isActive: Boolean)
 }
+
+    @Query("UPDATE members SET cansPaidThisTurn = :count WHERE id = :memberId")
+    suspend fun updateCansPaidThisTurn(memberId: Long, count: Int)

@@ -22,12 +22,16 @@ import javax.inject.Inject
 
 data class DashboardUiState(
     val nextPayerResult: NextPayerResult? = null,
+    val nextPayerMember: MemberEntity? = null,
     val lastPayment: PaymentEntity? = null,
     val lastPaymentMember: MemberEntity? = null,
     val monthSummary: MonthlySpendingSummary? = null,
     val activeMemberCount: Int = 0,
     val totalGroupSpend: Double = 0.0,
     val currencySymbol: String = "AED",
+    val cansPerTurn: Int = 1,
+    /** Cans the current payer has already bought this turn */
+    val cansPaidThisTurn: Int = 0,
     val syncState: SyncState = SyncState(),
     val isLoading: Boolean = true
 )
@@ -45,18 +49,27 @@ class DashboardViewModel @Inject constructor(
         paymentRepository.observeCurrentMonthSummary(),
         memberRepository.observeActiveMemberCount(),
         paymentRepository.observeTotalGroupSpend(),
-        settingsRepository.observeSettings()
-    ) { lastPayment, monthSummary, activeCount, totalSpend, settings ->
+        settingsRepository.observeSettings(),
+        memberRepository.observeActiveMembers()
+    ) { lastPayment, monthSummary, activeCount, totalSpend, settings, activeMembers ->
         val nextPayer  = memberRepository.resolveNextPayer(lastPayment?.paidByMemberId)
         val lastMember = lastPayment?.paidByMemberId?.let { memberRepository.getMemberById(it) }
+        val nextMember = nextPayer.member
+
+        // How many cans has the next payer already bought this turn?
+        val cansPaid = nextMember?.cansPaidThisTurn ?: 0
+
         DashboardUiState(
             nextPayerResult   = nextPayer,
+            nextPayerMember   = nextMember,
             lastPayment       = lastPayment,
             lastPaymentMember = lastMember,
             monthSummary      = monthSummary,
             activeMemberCount = activeCount,
             totalGroupSpend   = totalSpend,
             currencySymbol    = settings.currencySymbol,
+            cansPerTurn       = settings.cansPerTurn,
+            cansPaidThisTurn  = cansPaid,
             syncState         = syncManager.syncState.value,
             isLoading         = false
         )
@@ -66,7 +79,6 @@ class DashboardViewModel @Inject constructor(
         memberRepository.setManualNextPayer(memberId)
     }
 
-    /** Pull-to-refresh: re-attaches Firebase listener to force fresh data pull */
     fun refresh(onDone: () -> Unit) = viewModelScope.launch {
         try {
             val settings = settingsRepository.getSettings()

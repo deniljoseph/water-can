@@ -50,4 +50,5 @@ class SettingsViewModel @Inject constructor(
     fun setReminderTime(h: Int, m: Int)             = viewModelScope.launch { settingsRepository.updateReminderTime(h, m) }
     fun setDefaultPrice(price: Double)              = viewModelScope.launch { settingsRepository.updateDefaultPrice(price) }
     fun recordMonthlyReset()                        = viewModelScope.launch { settingsRepository.recordMonthlyReset() }
+    fun setCansPerTurn(count: Int)                  = viewModelScope.launch { settingsRepository.updateCansPerTurn(count) }
 }

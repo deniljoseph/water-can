@@ -64,3 +64,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE `settings` ADD COLUMN `lastSyncAt` INTEGER")
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `settings` ADD COLUMN `cansPerTurn` INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `members` ADD COLUMN `cansPaidThisTurn` INTEGER NOT NULL DEFAULT 0")
+    }
+}
