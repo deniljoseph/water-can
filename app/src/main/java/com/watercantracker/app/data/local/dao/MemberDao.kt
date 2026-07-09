@@ -54,6 +54,9 @@ interface MemberDao {
     @Query("UPDATE members SET rotationOrder = :order WHERE id = :memberId")
     suspend fun updateRotationOrder(memberId: Long, order: Int)
 
+    @Query("UPDATE members SET cansPaidThisTurn = :count WHERE id = :memberId")
+    suspend fun updateCansPaidThisTurn(memberId: Long, count: Int)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: MemberEntity): Long
 
@@ -66,6 +69,3 @@ interface MemberDao {
     @Query("UPDATE members SET isActive = :isActive WHERE id = :memberId")
     suspend fun setActiveStatus(memberId: Long, isActive: Boolean)
 }
-
-    @Query("UPDATE members SET cansPaidThisTurn = :count WHERE id = :memberId")
-    suspend fun updateCansPaidThisTurn(memberId: Long, count: Int)

@@ -33,29 +33,23 @@ import com.watercantracker.app.data.repository.PaymentRepository
 class WhoPaysNextWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val db = WaterCanDatabase.getInstance(context)
-        val memberRepo = MemberRepository(db.memberDao())
+        val db          = WaterCanDatabase.getInstance(context)
+        val memberRepo  = MemberRepository(db.memberDao(), db.paymentDao())
         val paymentRepo = PaymentRepository(db.paymentDao())
 
-        val lastPayment = paymentRepo.getLastPayment()
-        val result = memberRepo.resolveNextPayer(lastPayment?.paidByMemberId)
+        val lastPayment   = paymentRepo.getLastPayment()
+        val result        = memberRepo.resolveNextPayer(lastPayment?.paidByMemberId)
         val nextPayerName = result.member?.name
-        val activeCount = db.memberDao().getActiveMembers().size
+        val activeCount   = db.memberDao().getActiveMembers().size
 
         provideContent {
-            WidgetContent(
-                nextPayerName = nextPayerName,
-                activeCount = activeCount
-            )
+            WidgetContent(nextPayerName = nextPayerName, activeCount = activeCount)
         }
     }
 }
 
 @Composable
-private fun WidgetContent(
-    nextPayerName: String?,
-    activeCount: Int
-) {
+private fun WidgetContent(nextPayerName: String?, activeCount: Int) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()

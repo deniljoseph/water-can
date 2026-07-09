@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.watercantracker.app.data.local.entity.MemberEntity
 import com.watercantracker.app.data.local.entity.PaymentEntity
+import com.watercantracker.app.data.local.entity.SettingsEntity
 import com.watercantracker.app.data.repository.MemberRepository
 import com.watercantracker.app.data.repository.PaymentRepository
 import com.watercantracker.app.data.repository.SettingsRepository
@@ -13,6 +14,7 @@ import com.watercantracker.app.sync.FirebaseSyncManager
 import com.watercantracker.app.sync.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -30,7 +32,6 @@ data class DashboardUiState(
     val totalGroupSpend: Double = 0.0,
     val currencySymbol: String = "AED",
     val cansPerTurn: Int = 1,
-    /** Cans the current payer has already bought this turn */
     val cansPaidThisTurn: Int = 0,
     val syncState: SyncState = SyncState(),
     val isLoading: Boolean = true
@@ -44,20 +45,35 @@ class DashboardViewModel @Inject constructor(
     private val syncManager: FirebaseSyncManager
 ) : ViewModel() {
 
-    val uiState: StateFlow<DashboardUiState> = combine(
+    // Split into two combines (max 5 params each) to avoid the array-style overload
+    private val _baseFlow = combine(
         paymentRepository.observeLastPayment(),
         paymentRepository.observeCurrentMonthSummary(),
         memberRepository.observeActiveMemberCount(),
         paymentRepository.observeTotalGroupSpend(),
-        settingsRepository.observeSettings(),
-        memberRepository.observeActiveMembers()
-    ) { lastPayment, monthSummary, activeCount, totalSpend, settings, activeMembers ->
-        val nextPayer  = memberRepository.resolveNextPayer(lastPayment?.paidByMemberId)
-        val lastMember = lastPayment?.paidByMemberId?.let { memberRepository.getMemberById(it) }
-        val nextMember = nextPayer.member
+        settingsRepository.observeSettings()
+    ) { lastPayment, monthSummary, activeCount, totalSpend, settings ->
+        listOf(lastPayment, monthSummary, activeCount, totalSpend, settings)
+    }
 
-        // How many cans has the next payer already bought this turn?
-        val cansPaid = nextMember?.cansPaidThisTurn ?: 0
+    val uiState: StateFlow<DashboardUiState> = combine(
+        _baseFlow,
+        memberRepository.observeActiveMembers()
+    ) { baseList, activeMembers ->
+        @Suppress("UNCHECKED_CAST")
+        val lastPayment   = baseList[0] as? PaymentEntity
+        @Suppress("UNCHECKED_CAST")
+        val monthSummary  = baseList[1] as? MonthlySpendingSummary
+        val activeCount   = baseList[2] as Int
+        val totalSpend    = baseList[3] as Double
+        val settings      = baseList[4] as SettingsEntity
+
+        val nextPayer  = memberRepository.resolveNextPayer(lastPayment?.paidByMemberId)
+        val lastMember = lastPayment?.paidByMemberId?.let {
+            activeMembers.firstOrNull { m -> m.id == it }
+        }
+        val nextMember = nextPayer.member
+        val cansPaid   = nextMember?.cansPaidThisTurn ?: 0
 
         DashboardUiState(
             nextPayerResult   = nextPayer,
