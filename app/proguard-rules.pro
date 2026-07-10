@@ -39,3 +39,21 @@
 # ZXing QR
 -keep class com.google.zxing.** { *; }
 -dontwarn com.google.zxing.**
+
+# Apache POI pulls in graphbuilder (used for chart shapes in desktop Excel) which
+# references java.awt.Shape — a desktop-only AWT class not present on Android.
+# We don't use Excel charting features, so it's safe to ignore these missing classes.
+-dontwarn java.awt.**
+-dontwarn com.graphbuilder.**
+-dontwarn javax.imageio.**
+-dontwarn org.apache.batik.**
+-dontwarn org.apache.xmlgraphics.**
+
+# Apache POI general
+-dontwarn org.apache.poi.**
+-dontwarn org.apache.xmlbeans.**
+-dontwarn org.openxmlformats.**
+-dontwarn schemasMicrosoftComOfficeOffice.**
+-keep class org.apache.poi.** { *; }
+-keep class org.apache.xmlbeans.** { *; }
+-keep class org.openxmlformats.** { *; }
