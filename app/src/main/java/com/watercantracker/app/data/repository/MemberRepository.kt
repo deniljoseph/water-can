@@ -6,7 +6,6 @@ import com.watercantracker.app.data.local.entity.MemberEntity
 import com.watercantracker.app.domain.model.NextPayerReason
 import com.watercantracker.app.domain.model.NextPayerResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,13 +75,12 @@ class MemberRepository @Inject constructor(
     /**
      * Resolves who should pay next.
      *
-     * The person at the FRONT of the rotation queue (index 0) is always shown
-     * as next — regardless of who paid last. Out-of-turn payments don't shift
-     * the queue pointer.
-     *
-     * The queue advances only when the front person has bought their full quota
-     * (cansPerTurn cans since the last time the queue advanced). Partial quota
-     * payments (e.g. 1 of 2 cans) keep them at the front until done.
+     * "Next" = the active, non-skipped member with the LOWEST rotation order who
+     * has NOT yet completed their can quota (cansPaidThisTurn < cansPerTurn).
+     * This member stays at the front indefinitely until they buy enough cans —
+     * there is no monthly reset and no requirement that only their own payment
+     * counts toward the queue advancing. Anyone paying always updates their OWN
+     * quota, regardless of whose "turn" it technically is.
      */
     suspend fun resolveNextPayer(lastPayerMemberId: Long?): NextPayerResult {
         val active = memberDao.getActiveMembers()
@@ -96,42 +94,36 @@ class MemberRepository @Inject constructor(
         val nonSkipped = active.filter { !it.isSkipped }
         if (nonSkipped.isEmpty()) return NextPayerResult(active.first(), NextPayerReason.ALL_SKIPPED, null)
 
+        // Cans-per-turn is read by the caller (Dashboard) for display; here we only
+        // need queue order, since whoever is first and hasn't rotated past is next.
         return NextPayerResult(nonSkipped.first(), NextPayerReason.ROTATION_ORDER, null)
     }
 
     /**
      * Called after every payment save.
      *
-     * Checks if the front-of-queue member has now bought enough cans (their
-     * full cansPerTurn quota). If yes, rotates them to the back.
+     * The payer's OWN can quota always updates — regardless of whether they were
+     * "next" or paid out of turn. If this payment completes their quota
+     * (cansPaidThisTurn >= cansPerTurn), they rotate to the back of the queue and
+     * their counter resets (any surplus cans are simply not carried over — the
+     * quota is about turn-taking, not money; money is settled separately).
      *
-     * "Enough cans" = sum of all their payments since the last rotation advance,
-     * i.e. since the member immediately behind them last had rotation order 0.
-     * In practice: we look at all payments by the current front-of-queue member
-     * and compare to the cansSinceLastAdvance stored on their entity.
+     * A member who never pays stays at whatever position they're in — if they are
+     * at the front, they remain the displayed "next payer" indefinitely, with no
+     * monthly reset of any kind.
      */
     suspend fun advanceRotationIfNeeded(payerMemberId: Long, cansJustPaid: Int, cansPerTurn: Int) {
-        val active     = memberDao.getActiveMembers()
-        val nonSkipped = active.filter { !it.isSkipped }
-        if (nonSkipped.isEmpty()) return
+        val payer = memberDao.getMemberById(payerMemberId) ?: return
+        val newTotal = payer.cansPaidThisTurn + cansJustPaid
 
-        val frontOfQueue = nonSkipped.first()
-
-        // Only the designated payer's cans count toward advancing the queue
-        if (frontOfQueue.id != payerMemberId) return
-
-        // Count total cans bought by this member since their turn started
-        val totalCansThisTurn = frontOfQueue.cansPaidThisTurn + cansJustPaid
-
-        if (totalCansThisTurn >= cansPerTurn) {
-            // Full quota met → rotate to back, reset counter
+        if (newTotal >= cansPerTurn) {
+            val active   = memberDao.getActiveMembers()
             val maxOrder = active.maxOfOrNull { it.rotationOrder } ?: 0
-            memberDao.updateRotationOrder(frontOfQueue.id, maxOrder + 1)
-            memberDao.updateCansPaidThisTurn(frontOfQueue.id, 0)
+            memberDao.updateRotationOrder(payer.id, maxOrder + 1)
+            memberDao.updateCansPaidThisTurn(payer.id, 0)
             reorderRotation()
         } else {
-            // Partial quota — keep at front, update running total
-            memberDao.updateCansPaidThisTurn(frontOfQueue.id, totalCansThisTurn)
+            memberDao.updateCansPaidThisTurn(payer.id, newTotal)
         }
     }
 
