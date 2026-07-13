@@ -6,6 +6,7 @@ import com.watercantracker.app.data.local.dao.JointPaymentDao
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
 import com.watercantracker.app.data.local.dao.PaymentDao
+import com.watercantracker.app.data.local.dao.SettledDebtDao
 import com.watercantracker.app.data.local.dao.SettlementDao
 import com.watercantracker.app.data.local.dao.SettingsDao
 import dagger.Module
@@ -29,4 +30,5 @@ object DatabaseModule {
     @Provides fun provideNotificationDao(db: WaterCanDatabase): NotificationDao = db.notificationDao()
     @Provides fun provideSettlementDao(db: WaterCanDatabase): SettlementDao = db.settlementDao()
     @Provides fun provideJointPaymentDao(db: WaterCanDatabase): JointPaymentDao = db.jointPaymentDao()
+    @Provides fun provideSettledDebtDao(db: WaterCanDatabase): SettledDebtDao = db.settledDebtDao()
 }

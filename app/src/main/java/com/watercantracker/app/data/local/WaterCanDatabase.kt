@@ -8,18 +8,21 @@ import com.watercantracker.app.data.local.dao.JointPaymentDao
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.NotificationDao
 import com.watercantracker.app.data.local.dao.PaymentDao
+import com.watercantracker.app.data.local.dao.SettledDebtDao
 import com.watercantracker.app.data.local.dao.SettlementDao
 import com.watercantracker.app.data.local.dao.SettingsDao
 import com.watercantracker.app.data.local.entity.JointPaymentContributorEntity
 import com.watercantracker.app.data.local.entity.MemberEntity
 import com.watercantracker.app.data.local.entity.NotificationEntity
 import com.watercantracker.app.data.local.entity.PaymentEntity
+import com.watercantracker.app.data.local.entity.SettledDebtEntity
 import com.watercantracker.app.data.local.entity.SettlementEntity
 import com.watercantracker.app.data.local.entity.SettingsEntity
 import com.watercantracker.app.data.local.migration.MIGRATION_1_2
 import com.watercantracker.app.data.local.migration.MIGRATION_2_3
 import com.watercantracker.app.data.local.migration.MIGRATION_3_4
 import com.watercantracker.app.data.local.migration.MIGRATION_4_5
+import com.watercantracker.app.data.local.migration.MIGRATION_5_6
 
 @Database(
     entities = [
@@ -28,9 +31,10 @@ import com.watercantracker.app.data.local.migration.MIGRATION_4_5
         SettingsEntity::class,
         NotificationEntity::class,
         SettlementEntity::class,
-        JointPaymentContributorEntity::class
+        JointPaymentContributorEntity::class,
+        SettledDebtEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class WaterCanDatabase : RoomDatabase() {
@@ -40,6 +44,7 @@ abstract class WaterCanDatabase : RoomDatabase() {
     abstract fun notificationDao(): NotificationDao
     abstract fun settlementDao(): SettlementDao
     abstract fun jointPaymentDao(): JointPaymentDao
+    abstract fun settledDebtDao(): SettledDebtDao
 
     companion object {
         @Volatile private var INSTANCE: WaterCanDatabase? = null
@@ -51,7 +56,10 @@ abstract class WaterCanDatabase : RoomDatabase() {
                     WaterCanDatabase::class.java,
                     "water_can_tracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
+                        MIGRATION_4_5, MIGRATION_5_6
+                    )
                     .build()
                     .also { INSTANCE = it }
             }

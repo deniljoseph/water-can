@@ -1,10 +1,13 @@
 package com.watercantracker.app.data.repository
 
+import android.content.Context
 import com.watercantracker.app.data.local.dao.MemberDao
 import com.watercantracker.app.data.local.dao.PaymentDao
 import com.watercantracker.app.data.local.entity.MemberEntity
 import com.watercantracker.app.domain.model.NextPayerReason
 import com.watercantracker.app.domain.model.NextPayerResult
+import com.watercantracker.app.notification.TurnNotifier
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,7 +15,9 @@ import javax.inject.Singleton
 @Singleton
 class MemberRepository @Inject constructor(
     private val memberDao: MemberDao,
-    private val paymentDao: PaymentDao
+    private val paymentDao: PaymentDao,
+    @ApplicationContext private val context: Context,
+    private val turnNotifier: TurnNotifier
 ) {
     fun observeAllMembers(): Flow<List<MemberEntity>> = memberDao.observeAllMembers()
     fun observeActiveMembers(): Flow<List<MemberEntity>> = memberDao.observeActiveMembers()
@@ -72,16 +77,6 @@ class MemberRepository @Inject constructor(
         }
     }
 
-    /**
-     * Resolves who should pay next.
-     *
-     * "Next" = the active, non-skipped member with the LOWEST rotation order who
-     * has NOT yet completed their can quota (cansPaidThisTurn < cansPerTurn).
-     * This member stays at the front indefinitely until they buy enough cans —
-     * there is no monthly reset and no requirement that only their own payment
-     * counts toward the queue advancing. Anyone paying always updates their OWN
-     * quota, regardless of whose "turn" it technically is.
-     */
     suspend fun resolveNextPayer(lastPayerMemberId: Long?): NextPayerResult {
         val active = memberDao.getActiveMembers()
         if (active.isEmpty()) return NextPayerResult(null, NextPayerReason.NO_ACTIVE_MEMBERS, null)
@@ -94,23 +89,14 @@ class MemberRepository @Inject constructor(
         val nonSkipped = active.filter { !it.isSkipped }
         if (nonSkipped.isEmpty()) return NextPayerResult(active.first(), NextPayerReason.ALL_SKIPPED, null)
 
-        // Cans-per-turn is read by the caller (Dashboard) for display; here we only
-        // need queue order, since whoever is first and hasn't rotated past is next.
         return NextPayerResult(nonSkipped.first(), NextPayerReason.ROTATION_ORDER, null)
     }
 
     /**
-     * Called after every payment save.
-     *
-     * The payer's OWN can quota always updates — regardless of whether they were
-     * "next" or paid out of turn. If this payment completes their quota
-     * (cansPaidThisTurn >= cansPerTurn), they rotate to the back of the queue and
-     * their counter resets (any surplus cans are simply not carried over — the
-     * quota is about turn-taking, not money; money is settled separately).
-     *
-     * A member who never pays stays at whatever position they're in — if they are
-     * at the front, they remain the displayed "next payer" indefinitely, with no
-     * monthly reset of any kind.
+     * Called after every payment save. The payer's OWN can quota always updates,
+     * regardless of queue position. If this completes their quota, they rotate
+     * to the back and a push notification fires immediately for whoever is now
+     * at the front of the queue.
      */
     suspend fun advanceRotationIfNeeded(payerMemberId: Long, cansJustPaid: Int, cansPerTurn: Int) {
         val payer = memberDao.getMemberById(payerMemberId) ?: return
@@ -122,6 +108,14 @@ class MemberRepository @Inject constructor(
             memberDao.updateRotationOrder(payer.id, maxOrder + 1)
             memberDao.updateCansPaidThisTurn(payer.id, 0)
             reorderRotation()
+
+            // Notify whoever is now at the front of the queue — instant, not daily
+            val newNext = resolveNextPayer(payerMemberId)
+            newNext.member?.let { nextMember ->
+                if (nextMember.id != payer.id) {
+                    turnNotifier.notifyTurnChanged(context, nextMember.name)
+                }
+            }
         } else {
             memberDao.updateCansPaidThisTurn(payer.id, newTotal)
         }

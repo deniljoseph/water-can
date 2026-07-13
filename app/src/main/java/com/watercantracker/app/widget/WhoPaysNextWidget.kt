@@ -29,12 +29,16 @@ import com.watercantracker.app.MainActivity
 import com.watercantracker.app.data.local.WaterCanDatabase
 import com.watercantracker.app.data.repository.MemberRepository
 import com.watercantracker.app.data.repository.PaymentRepository
+import com.watercantracker.app.notification.TurnNotifier
 
 class WhoPaysNextWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db          = WaterCanDatabase.getInstance(context)
-        val memberRepo  = MemberRepository(db.memberDao(), db.paymentDao())
+        // Widget runs outside Hilt's DI graph, so we build dependencies manually.
+        // TurnNotifier is a no-op here since resolveNextPayer (read-only) never
+        // triggers advanceRotationIfNeeded from the widget.
+        val memberRepo  = MemberRepository(db.memberDao(), db.paymentDao(), context, TurnNotifier())
         val paymentRepo = PaymentRepository(db.paymentDao())
 
         val lastPayment   = paymentRepo.getLastPayment()

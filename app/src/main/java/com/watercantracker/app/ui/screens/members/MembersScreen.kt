@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +35,9 @@ fun MembersScreen(
     val tabs = listOf("Rotation", "Balances")
     val currency = state.settings.currencySymbol
 
+    // Settle confirmation dialog state
+    var pendingSettle by remember { mutableStateOf<Pair<MemberBalance, MemberBalance>?>(null) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -59,7 +61,7 @@ fun MembersScreen(
         }
     ) { padding ->
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (state.members.isEmpty()) {
             EmptyState(
                 icon = Icons.Outlined.GroupOff,
@@ -70,34 +72,26 @@ fun MembersScreen(
             )
         } else {
             Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-                // Tab row
                 TabRow(selectedTabIndex = selectedTab) {
                     tabs.forEachIndexed { idx, title ->
-                        Tab(
-                            selected = selectedTab == idx,
-                            onClick = { selectedTab = idx },
-                            text = { Text(title) }
-                        )
+                        Tab(selected = selectedTab == idx, onClick = { selectedTab = idx }, text = { Text(title) })
                     }
                 }
-
                 when (selectedTab) {
                     0 -> RotationTab(
-                        state = state,
-                        bottomPadding = bottomPadding,
-                        onEdit = onEditMember,
-                        onDelete = { pendingDelete = it },
+                        state = state, bottomPadding = bottomPadding,
+                        onEdit = onEditMember, onDelete = { pendingDelete = it },
                         onSetNext = { viewModel.setManualNextPayer(it) },
                         onSkip = { viewModel.skipMember(it) },
                         onToggleActive = { id, active -> viewModel.setActiveStatus(id, active) },
-                        onMoveUp = { viewModel.moveUp(it) },
-                        onMoveDown = { viewModel.moveDown(it) }
+                        onMoveUp = { viewModel.moveUp(it) }, onMoveDown = { viewModel.moveDown(it) }
                     )
                     1 -> BalancesTab(
                         balances = state.memberBalances,
                         totalGroupSpend = state.totalGroupSpend,
                         currency = currency,
-                        bottomPadding = bottomPadding
+                        bottomPadding = bottomPadding,
+                        onSettle = { debtor, creditor -> pendingSettle = debtor to creditor }
                     )
                 }
             }
@@ -112,35 +106,52 @@ fun MembersScreen(
             onDismiss = { pendingDelete = null }
         )
     }
+
+    pendingSettle?.let { (debtor, creditor) ->
+        val amount = minOf(debtor.owes, creditor.credit)
+        AlertDialog(
+            onDismissRequest = { pendingSettle = null },
+            title = { Text("Settle debt?") },
+            text = {
+                Text("${debtor.memberName} pays ${creditor.memberName} ${formatAmount(amount, currency)}. " +
+                        "This marks the debt as settled and updates both balances.")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.settleDebt(debtor.memberId, debtor.memberName, creditor.memberId, creditor.memberName, amount)
+                    pendingSettle = null
+                }) { Text("Settle Now") }
+            },
+            dismissButton = { TextButton(onClick = { pendingSettle = null }) { Text("Cancel") } }
+        )
+    }
+
+    state.settleSuccess?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearSettleSuccess() },
+            title = { Text("Settled ✓") },
+            text = { Text(msg) },
+            confirmButton = { TextButton(onClick = { viewModel.clearSettleSuccess() }) { Text("OK") } }
+        )
+    }
 }
 
-// ── Rotation Tab ──────────────────────────────────────────────────────────────
 @Composable
 private fun RotationTab(
-    state: MembersUiState,
-    bottomPadding: PaddingValues,
-    onEdit: (Long) -> Unit,
-    onDelete: (MemberEntity) -> Unit,
-    onSetNext: (Long) -> Unit,
-    onSkip: (Long) -> Unit,
-    onToggleActive: (Long, Boolean) -> Unit,
-    onMoveUp: (Long) -> Unit,
-    onMoveDown: (Long) -> Unit
+    state: MembersUiState, bottomPadding: PaddingValues,
+    onEdit: (Long) -> Unit, onDelete: (MemberEntity) -> Unit,
+    onSetNext: (Long) -> Unit, onSkip: (Long) -> Unit,
+    onToggleActive: (Long, Boolean) -> Unit, onMoveUp: (Long) -> Unit, onMoveDown: (Long) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(
-            top = 8.dp, bottom = bottomPadding.calculateBottomPadding() + 80.dp,
-            start = 16.dp, end = 16.dp
-        ),
+        contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding.calculateBottomPadding() + 80.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text(
-                "Rotation queue — top member pays next",
+            Text("Rotation queue — top member pays next",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+                modifier = Modifier.padding(bottom = 4.dp))
         }
         itemsIndexed(state.members, key = { _, m -> m.id }) { index, member ->
             val stats = state.memberStats.firstOrNull { it.memberId == member.id }
@@ -149,34 +160,27 @@ private fun RotationTab(
                 totalContributed = stats?.totalAmountContributed ?: 0.0,
                 timePaid = stats?.totalPayments ?: 0,
                 currency = state.settings.currencySymbol,
-                onEdit = { onEdit(member.id) },
-                onDelete = { onDelete(member) },
-                onSetNext = { onSetNext(member.id) },
-                onSkip = { onSkip(member.id) },
+                onEdit = { onEdit(member.id) }, onDelete = { onDelete(member) },
+                onSetNext = { onSetNext(member.id) }, onSkip = { onSkip(member.id) },
                 onToggleActive = { onToggleActive(member.id, !member.isActive) },
-                onMoveUp = { onMoveUp(member.id) },
-                onMoveDown = { onMoveDown(member.id) }
+                onMoveUp = { onMoveUp(member.id) }, onMoveDown = { onMoveDown(member.id) }
             )
         }
     }
 }
 
-// ── Balances Tab ──────────────────────────────────────────────────────────────
 @Composable
 private fun BalancesTab(
     balances: List<MemberBalance>,
     totalGroupSpend: Double,
     currency: String,
-    bottomPadding: PaddingValues
+    bottomPadding: PaddingValues,
+    onSettle: (MemberBalance, MemberBalance) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(
-            top = 12.dp, bottom = bottomPadding.calculateBottomPadding() + 16.dp,
-            start = 16.dp, end = 16.dp
-        ),
+        contentPadding = PaddingValues(top = 12.dp, bottom = bottomPadding.calculateBottomPadding() + 16.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Summary header
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
@@ -189,10 +193,7 @@ private fun BalancesTab(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("Fair share each", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                formatAmount(if (balances.isNotEmpty()) totalGroupSpend / balances.size else 0.0, currency),
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(formatAmount(if (balances.isNotEmpty()) totalGroupSpend / balances.size else 0.0, currency), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -200,51 +201,78 @@ private fun BalancesTab(
         }
 
         if (balances.isEmpty()) {
+            item { Text("No active members.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
+        }
+
+        val owesList   = balances.filter { it.status == MemberBalance.Status.OWES }
+        val creditList = balances.filter { it.status == MemberBalance.Status.CREDIT }
+        val settledList = balances.filter { it.status == MemberBalance.Status.SETTLED }
+
+        // Suggested settlements: pair each debtor with the largest creditor
+        if (owesList.isNotEmpty() && creditList.isNotEmpty()) {
             item {
-                Text("No active members.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+                Text("Suggested Settlements", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+            }
+            // Simple greedy pairing for display purposes — one suggestion per debtor
+            val sortedCreditors = creditList.sortedByDescending { it.credit }
+            owesList.sortedByDescending { it.owes }.forEach { debtor ->
+                val creditor = sortedCreditors.firstOrNull()
+                if (creditor != null) {
+                    item {
+                        SettleSuggestionCard(debtor, creditor, currency) { onSettle(debtor, creditor) }
+                    }
+                }
             }
         }
 
-        // Owes section
-        val owesList = balances.filter { it.status == MemberBalance.Status.OWES }
         if (owesList.isNotEmpty()) {
-            item {
-                Text(
-                    "OWES MONEY",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-                )
-            }
+            item { Text("OWES MONEY", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)) }
             items(owesList.size) { i -> BalanceCard(owesList[i], currency) }
         }
-
-        // Settled section
-        val settledList = balances.filter { it.status == MemberBalance.Status.SETTLED }
         if (settledList.isNotEmpty()) {
-            item {
-                Text(
-                    "SETTLED",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-                )
-            }
+            item { Text("SETTLED", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)) }
             items(settledList.size) { i -> BalanceCard(settledList[i], currency) }
         }
-
-        // Credit section
-        val creditList = balances.filter { it.status == MemberBalance.Status.CREDIT }
         if (creditList.isNotEmpty()) {
-            item {
-                Text(
-                    "IN CREDIT",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
-                )
-            }
+            item { Text("IN CREDIT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)) }
             items(creditList.size) { i -> BalanceCard(creditList[i], currency) }
+        }
+    }
+}
+
+@Composable
+private fun SettleSuggestionCard(
+    debtor: MemberBalance,
+    creditor: MemberBalance,
+    currency: String,
+    onSettleClick: () -> Unit
+) {
+    val amount = minOf(debtor.owes, creditor.credit)
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                MemberAvatar(name = debtor.memberName, avatarUri = debtor.avatarUri, size = 32.dp)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Rounded.ArrowForward, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(8.dp))
+                MemberAvatar(name = creditor.memberName, avatarUri = creditor.avatarUri, size = 32.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("${debtor.memberName} owes ${creditor.memberName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(formatAmount(amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = onSettleClick, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Settle Now")
+            }
         }
     }
 }
@@ -252,87 +280,43 @@ private fun BalancesTab(
 @Composable
 private fun BalanceCard(balance: MemberBalance, currency: String) {
     val (bgColor, labelText, amountColor) = when (balance.status) {
-        MemberBalance.Status.OWES -> Triple(
-            MaterialTheme.colorScheme.errorContainer,
-            "Owes ${formatAmount(balance.owes, currency)}",
-            MaterialTheme.colorScheme.error
-        )
-        MemberBalance.Status.CREDIT -> Triple(
-            MaterialTheme.colorScheme.primaryContainer,
-            "Credit ${formatAmount(balance.credit, currency)}",
-            MaterialTheme.colorScheme.primary
-        )
-        MemberBalance.Status.SETTLED -> Triple(
-            MaterialTheme.colorScheme.surfaceVariant,
-            "Settled",
-            MaterialTheme.colorScheme.secondary
-        )
+        MemberBalance.Status.OWES -> Triple(MaterialTheme.colorScheme.errorContainer, "Owes ${formatAmount(balance.owes, currency)}", MaterialTheme.colorScheme.error)
+        MemberBalance.Status.CREDIT -> Triple(MaterialTheme.colorScheme.primaryContainer, "Credit ${formatAmount(balance.credit, currency)}", MaterialTheme.colorScheme.primary)
+        MemberBalance.Status.SETTLED -> Triple(MaterialTheme.colorScheme.surfaceVariant, "Settled", MaterialTheme.colorScheme.secondary)
     }
-
     Surface(shape = MaterialTheme.shapes.medium, color = bgColor, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             MemberAvatar(name = balance.memberName, avatarUri = balance.avatarUri, size = 40.dp)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(balance.memberName, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Paid: ${formatAmount(balance.totalPaid, currency)}  •  Fair share: ${formatAmount(balance.fairShare, currency)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("Paid: ${formatAmount(balance.totalPaid, currency)}  •  Fair share: ${formatAmount(balance.fairShare, currency)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Surface(shape = MaterialTheme.shapes.small, color = amountColor.copy(alpha = 0.15f)) {
-                    Text(
-                        labelText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = amountColor,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+            Surface(shape = MaterialTheme.shapes.small, color = amountColor.copy(alpha = 0.15f)) {
+                Text(labelText, style = MaterialTheme.typography.labelMedium, color = amountColor, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
             }
         }
     }
 }
 
-// ── Member rotation card (unchanged logic, slight cleanup) ────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemberCard(
-    member: MemberEntity,
-    index: Int,
-    totalMembers: Int,
-    totalContributed: Double,
-    timePaid: Int,
-    currency: String,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onSetNext: () -> Unit,
-    onSkip: () -> Unit,
-    onToggleActive: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    member: MemberEntity, index: Int, totalMembers: Int, totalContributed: Double, timePaid: Int, currency: String,
+    onEdit: () -> Unit, onDelete: () -> Unit, onSetNext: () -> Unit, onSkip: () -> Unit,
+    onToggleActive: () -> Unit, onMoveUp: () -> Unit, onMoveDown: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
+            Surface(shape = MaterialTheme.shapes.small,
                 color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(28.dp)
-            ) {
+                modifier = Modifier.size(28.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        "${index + 1}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (index == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("${index + 1}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                        color = if (index == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -354,11 +338,8 @@ private fun MemberCard(
                         }
                     }
                 }
-                Text(
-                    "${formatAmount(totalContributed, currency)} contributed · $timePaid payments",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("${formatAmount(totalContributed, currency)} contributed · $timePaid payments",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Rounded.MoreVert, "Options") }
