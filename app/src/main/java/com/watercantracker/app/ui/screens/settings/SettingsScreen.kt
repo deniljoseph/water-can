@@ -244,6 +244,24 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
+            // ── Updates ───────────────────────────────────────────────────────
+            SettingsSection("Updates") {
+                val updateViewModel: com.watercantracker.app.update.UpdateViewModel = hiltViewModel()
+                val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+                ClickRow(
+                    title = "Check for updates",
+                    subtitle = when {
+                        updateState.isChecking -> "Checking…"
+                        updateState.updateInfo != null -> "Update available: v${updateState.updateInfo?.versionName}"
+                        updateState.checkedOnce -> "You're on v${updateState.currentVersionName} — up to date"
+                        else -> "Current version: v${updateState.currentVersionName}"
+                    },
+                    icon = Icons.Rounded.SystemUpdate
+                ) { updateViewModel.checkForUpdate() }
+            }
+
+            HorizontalDivider()
+
             // ── About ─────────────────────────────────────────────────────────
             SettingsSection("About") {
                 ElevatedCard(modifier = Modifier

@@ -19,6 +19,7 @@ import com.watercantracker.app.notification.ReminderWorker
 import com.watercantracker.app.sync.SyncViewModel
 import com.watercantracker.app.ui.navigation.Screen
 import com.watercantracker.app.ui.navigation.WaterCanNavGraph
+import com.watercantracker.app.update.UpdateCheckerHost
 import com.watercantracker.app.ui.navigation.bottomNavItems
 import com.watercantracker.app.ui.screens.settings.SettingsViewModel
 import com.watercantracker.app.ui.theme.WaterCanTrackerTheme
@@ -96,6 +97,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun WaterCanApp(onNavReady: (NavHostController) -> Unit) {
+    UpdateCheckerHost()
     val navController = rememberNavController()
     val currentBackstack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackstack?.destination?.route
