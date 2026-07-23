@@ -1,5 +1,6 @@
 package com.watercantracker.app.ui.screens.dashboard
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.watercantracker.app.data.local.entity.MemberEntity
@@ -10,6 +11,7 @@ import com.watercantracker.app.data.repository.PaymentRepository
 import com.watercantracker.app.data.repository.SettingsRepository
 import com.watercantracker.app.domain.model.MonthlySpendingSummary
 import com.watercantracker.app.domain.model.NextPayerResult
+import com.watercantracker.app.notification.TurnNotifier
 import com.watercantracker.app.sync.FirebaseSyncManager
 import com.watercantracker.app.sync.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -34,7 +37,8 @@ data class DashboardUiState(
     val cansPerTurn: Int = 1,
     val cansPaidThisTurn: Int = 0,
     val syncState: SyncState = SyncState(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val nudgeSent: Boolean = false
 )
 
 @HiltViewModel
@@ -42,8 +46,11 @@ class DashboardViewModel @Inject constructor(
     private val memberRepository: MemberRepository,
     private val paymentRepository: PaymentRepository,
     private val settingsRepository: SettingsRepository,
-    private val syncManager: FirebaseSyncManager
+    private val syncManager: FirebaseSyncManager,
+    private val turnNotifier: TurnNotifier
 ) : ViewModel() {
+
+    private val _nudgeSent = MutableStateFlow(false)
 
     // Split into two combines (max 5 params each) to avoid the array-style overload
     private val _baseFlow = combine(
@@ -58,8 +65,9 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> = combine(
         _baseFlow,
-        memberRepository.observeActiveMembers()
-    ) { baseList, activeMembers ->
+        memberRepository.observeActiveMembers(),
+        _nudgeSent
+    ) { baseList, activeMembers, nudgeSent ->
         @Suppress("UNCHECKED_CAST")
         val lastPayment   = baseList[0] as? PaymentEntity
         @Suppress("UNCHECKED_CAST")
@@ -87,7 +95,8 @@ class DashboardViewModel @Inject constructor(
             cansPerTurn       = settings.cansPerTurn,
             cansPaidThisTurn  = cansPaid,
             syncState         = syncManager.syncState.value,
-            isLoading         = false
+            isLoading         = false,
+            nudgeSent         = nudgeSent
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
@@ -105,5 +114,13 @@ class DashboardViewModel @Inject constructor(
             delay(800)
             onDone()
         }
+    }
+
+    /** Sends an on-demand nudge notification to whoever is currently next to pay. */
+    fun sendNudge(context: Context, payerName: String) = viewModelScope.launch {
+        turnNotifier.notifyNudge(context, payerName)
+        _nudgeSent.update { true }
+        delay(2500)
+        _nudgeSent.update { false }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.watercantracker.app.domain.model.NextPayerReason
@@ -41,6 +42,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val df = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
     var isRefreshing by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -170,14 +172,44 @@ fun DashboardScreen(
                         }
 
                         Spacer(Modifier.height(14.dp))
-                        OutlinedButton(
-                            onClick = onAddPayment,
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
-                                brush = Brush.linearGradient(listOf(AmberAccent, AmberAccent))
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text("Mark as paid →", color = AmberAccent,
-                                fontWeight = FontWeight.SemiBold)
+                            OutlinedButton(
+                                onClick = onAddPayment,
+                                border = ButtonDefaults.outlinedButtonBorder.copy(
+                                    brush = Brush.linearGradient(listOf(AmberAccent, AmberAccent))
+                                )
+                            ) {
+                                Text("Mark as paid →", color = AmberAccent,
+                                    fontWeight = FontWeight.SemiBold)
+                            }
+
+                            // Nudge button — sends an on-demand reminder to the next payer
+                            OutlinedButton(
+                                onClick = {
+                                    if (!state.nudgeSent) viewModel.sendNudge(context, nextMember.name)
+                                },
+                                enabled = !state.nudgeSent,
+                                border = ButtonDefaults.outlinedButtonBorder.copy(
+                                    brush = Brush.linearGradient(
+                                        listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.6f))
+                                    )
+                                )
+                            ) {
+                                if (state.nudgeSent) {
+                                    Icon(Icons.Rounded.Check, null,
+                                        tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Nudged!", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                } else {
+                                    Icon(Icons.Rounded.NotificationsActive, null,
+                                        tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Nudge", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
                         }
                     } else {
                         Text("No members yet — add members to start tracking.",
